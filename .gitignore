@@ -1,3 +1,6 @@
+# Doxygen files
+docs/tudat/doxygen-new/html
+
 # Generated files
 examples
 lib/
@@ -171,3 +174,4 @@ Tudat/interface/spice/Kernels/
 /cmake-build-debug/*
 /cmake-build*
 *.vscode
+

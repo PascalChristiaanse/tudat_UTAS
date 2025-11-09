@@ -263,7 +263,7 @@ void EihEquationsPartials::addSingleScalarTermWrtPositionPartial( Eigen::Matrix<
             }
             break;
         default:
-            throw std::runtime_error( "Error when getting EIH scalar term partial w.r.t. positon, index " + std::to_string( termIndex ) +
+            throw std::runtime_error( "Error when getting EIH scalar term partial w.r.t. position, index " + std::to_string( termIndex ) +
                                       " not allowed." );
     }
 }
@@ -291,7 +291,7 @@ Eigen::Matrix< double, 1, 3 > EihEquationsPartials::getSingleScalarCrossTermWrtP
                     currentTotalPointMassAccelerationsWrtPosition_[ bodyExerting ][ bodyPartial ];
             break;
         default:
-            throw std::runtime_error( "Error when getting EIH scalar cross term partial w.r.t. positon, index " +
+            throw std::runtime_error( "Error when getting EIH scalar cross term partial w.r.t. position, index " +
                                       std::to_string( termIndex ) + " not allowed." );
     }
     return scalarTermWrtPosition;
@@ -417,7 +417,7 @@ Eigen::Matrix< double, 3, 3 > EihEquationsPartials::getSingleVectorCrossTermWrtP
                     currentTotalPointMassAccelerationsWrtPosition_.at( bodyUndergoing ).at( bodyPartial );
             break;
         default:
-            throw std::runtime_error( "Error when getting EIH vector cross term partial w.r.t. positon, index " +
+            throw std::runtime_error( "Error when getting EIH vector cross term partial w.r.t. position, index " +
                                       std::to_string( termIndex ) + " not allowed." );
     }
     return vectorTermWrtPosition;

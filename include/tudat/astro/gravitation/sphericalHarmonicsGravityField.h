@@ -338,9 +338,9 @@ double calculateSphericalHarmonicGravitationalPotential( const Eigen::Vector3d& 
     double singleDegreeTerm = 0.0;
 
     // Determine body fixed spherical position of body udnergoing acceleration.
-    Eigen::Vector3d sphericalPositon = coordinate_conversions::convertCartesianToSpherical( bodyFixedPosition );
-    double latitude = mathematical_constants::PI / 2.0 - sphericalPositon.y( );
-    double longitude = sphericalPositon.z( );
+    Eigen::Vector3d sphericalPosition = coordinate_conversions::convertCartesianToSpherical( bodyFixedPosition );
+    double latitude = mathematical_constants::PI / 2.0 - sphericalPosition.y( );
+    double longitude = sphericalPosition.z( );
 
     double potential = 0.0;
     int startDegree = 0;

@@ -38,6 +38,7 @@ set(io_SOURCES
         "readVariousPdsFiles.cpp"
         "readViennaMappingFunctionData.cpp"
         "readIonexFile.cpp"
+        "unifiedDataLibraryReader.cpp"
 
 )
 
@@ -80,6 +81,7 @@ set(io_HEADERS
         "readTabulatedWeatherData.h"
         "readTrackingTxtFile.h"
         "readVariousPdsFiles.h"
+        "unifiedDataLibraryReader.h"
         )
 
 # Add library.

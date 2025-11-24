@@ -383,9 +383,10 @@ else( )
 endif( )
 
 # JSON dependency
-if (TUDAT_BUILD_WITH_JSON_INTERFACE)
+if (TUDAT_BUILD_WITH_JSON_INTERFACE OR TUDAT_BUILD_WITH_ESTIMATION_TOOLS)
     find_package(nlohmann_json REQUIRED 3.7.3)
 endif ()
+
 
 # TODO: Not sure if this is needed. Comes from CMake of tudatpy
 set(Boost_USE_STATIC_LIBS OFF)

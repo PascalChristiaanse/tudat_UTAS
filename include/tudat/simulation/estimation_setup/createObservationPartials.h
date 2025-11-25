@@ -204,7 +204,16 @@ public:
                 if( isPartialForConcatenatedObservable )
                 {
                     throw std::runtime_error(
-                            "Error when requesting partial creation for differenced time of arrical; concatenated partial not supported" );
+                            "Error when requesting partial creation for differenced time of arrival; concatenated partial not supported" );
+                }
+                observationPartials = createDifferencedObservablePartials< ObservationScalarType, TimeType, 1 >(
+                        observationModel, bodies, parametersToEstimate, isPartialForDifferencedObservable );
+                break;
+            case observation_models::differenced_frequency_of_arrival:
+                if( isPartialForConcatenatedObservable )
+                {
+                    throw std::runtime_error(
+                            "Error when requesting partial creation for differenced frequency of arrival; concatenated partial not supported" );
                 }
                 observationPartials = createDifferencedObservablePartials< ObservationScalarType, TimeType, 1 >(
                         observationModel, bodies, parametersToEstimate, isPartialForDifferencedObservable );
@@ -544,6 +553,53 @@ public:
                         secondPartial,
                         &observation_models::getDifferencedTimeOfArrivalScalingFactor,
                         getUndifferencedTimeAndStateIndices( differenced_time_of_arrival, linkEnds.size( ) ),
+                        &getDifferencedTimeOfArrivalDifferencedReferenceLinkEndTypes );
+                break;
+            }
+            case differenced_frequency_of_arrival: {
+                if( !isParameterObservationLinkTimeProperty(
+                            getDifferencedPartialParameterIdentifier( firstPartial, secondPartial ).first ) )
+                {
+                    if( firstPartial != nullptr )
+                    {
+                        if( std::dynamic_pointer_cast< DirectObservationPartial< 1 > >( firstPartial ) == nullptr )
+                        {
+                            throw std::runtime_error(
+                                    "Error when creating differenced frequency of arrival partial; first "
+                                    "input object type is incompatible" );
+                        }
+                        else if( std::dynamic_pointer_cast< DirectObservationPartial< 1 > >( firstPartial )->getObservableType( ) !=
+                                 one_way_range )
+                        {
+                            throw std::runtime_error(
+                                    "Error when creating differenced frequency of arrival partial; first "
+                                    "input observable type is incompatible" );
+                        }
+                    }
+
+                    if( secondPartial != nullptr )
+                    {
+                        if( std::dynamic_pointer_cast< DirectObservationPartial< 1 > >( secondPartial ) == nullptr )
+                        {
+                            throw std::runtime_error(
+                                    "Error when creating differenced frequency of arrival partial; second "
+                                    "input object type is incompatible" );
+                        }
+                        else if( std::dynamic_pointer_cast< DirectObservationPartial< 1 > >( secondPartial )->getObservableType( ) !=
+                                 one_way_range )
+                        {
+                            throw std::runtime_error(
+                                    "Error when creating differenced frequency of arrival partial; second "
+                                    "input observable type is incompatible" );
+                        }
+                    }
+                }
+
+                differencedPartial = std::make_shared< DifferencedObservablePartial< 1 > >(
+                        firstPartial,
+                        secondPartial,
+                        &observation_models::getDifferencedFrequencyOfArrivalScalingFactor,
+                        getUndifferencedTimeAndStateIndices( differenced_frequency_of_arrival, linkEnds.size( ) ),
                         &getDifferencedTimeOfArrivalDifferencedReferenceLinkEndTypes );
                 break;
             }

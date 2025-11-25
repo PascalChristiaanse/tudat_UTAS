@@ -39,6 +39,7 @@ enum ObservationAncilliarySimulationVariable {
     doppler_reference_frequency,
     sequential_range_lowest_ranging_component,
     range_conversion_factor,
+    fdoa_transmitter_frequency,
 };
 
 enum ObservationIntermediateSimulationVariable { transmitter_frequency_intermediate, received_frequency_intermediate };
@@ -58,6 +59,7 @@ public:
             case reception_reference_frequency_band:
             case sequential_range_lowest_ranging_component:
             case range_conversion_factor:
+            case fdoa_transmitter_frequency:
                 doubleData_[ variableType ] = variable;
                 break;
             default:
@@ -96,6 +98,7 @@ public:
                 case reception_reference_frequency_band:
                 case sequential_range_lowest_ranging_component:
                 case range_conversion_factor:
+                case fdoa_transmitter_frequency:
                     returnVariable = doubleData_.at( variableType );
                     break;
                 default:
@@ -184,6 +187,9 @@ public:
                 break;
             case range_conversion_factor:
                 name = "DSN range conversion factor from RU to meter";
+                break;
+            case fdoa_transmitter_frequency:
+                name = "FDOA transmitter frequency";
                 break;
             default:
                 throw std::runtime_error(
@@ -358,6 +364,17 @@ inline std::shared_ptr< ObservationAncilliarySimulationSettings > getDopplerMeas
             std::make_shared< ObservationAncilliarySimulationSettings >( );
 
     ancillarySettings->setAncilliaryDoubleVectorData( frequency_bands, convertFrequencyBandsToDoubleVector( frequencyBands ) );
+
+    return ancillarySettings;
+}
+
+inline std::shared_ptr< ObservationAncilliarySimulationSettings > getFdoaAncilliarySettings(
+        const double transmitterFrequency )
+{
+    std::shared_ptr< ObservationAncilliarySimulationSettings > ancillarySettings =
+            std::make_shared< ObservationAncilliarySimulationSettings >( );
+
+    ancillarySettings->setAncilliaryDoubleData( fdoa_transmitter_frequency, transmitterFrequency );
 
     return ancillarySettings;
 }

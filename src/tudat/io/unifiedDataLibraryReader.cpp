@@ -1,535 +1,611 @@
+/*    Copyright (c) 2010-2019, Delft University of Technology
+ *    All rigths reserved
+ *
+ *    This file is part of the Tudat. Redistribution and use in source and
+ *    binary forms, with or without modification, are permitted exclusively
+ *    under the terms of the Modified BSD license. You should have received
+ *    a copy of the license with this file. If not, please or visit:
+ *    http://tudat.tudelft.nl/LICENSE.
+ */
+
 #include "tudat/io/unifiedDataLibraryReader.h"
-#include <limits>
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
 
 namespace tudat
 {
 namespace io
 {
 
-// ----------------------
-// ObservationSet time indexing methods
-// ----------------------
+using json = nlohmann::json;
 
-void ObservationSet::setTimeColumn( const std::string& columnName )
+// ============================================================================
+// UTASObservationSet Implementation
+// ============================================================================
+
+template< typename T >
+T UTASObservationSet::getRequired( const json& obj, const std::string& key )
 {
-    m_timeColumnName = columnName;
-    m_timeIndexBuilt = false;
-    m_timeIndex.clear( );
-}
-
-const std::string& ObservationSet::getTimeColumnName( ) const
-{
-    return m_timeColumnName;
-}
-
-bool ObservationSet::hasTimeIndex( ) const
-{
-    return m_timeIndexBuilt;
-}
-
-void ObservationSet::buildTimeIndex( )
-{
-    if( m_timeColumnName.empty( ) )
+    if( !obj.contains( key ) )
     {
-        throw std::runtime_error( "Cannot build time index: time column not set" );
+        throw std::runtime_error( "UTASObservationSet: Required field '" + key + "' not found" );
     }
-
-    auto col = getColumn( m_timeColumnName );
-    if( !col )
-    {
-        throw std::runtime_error( "Cannot build time index: time column '" + m_timeColumnName + "' not found" );
-    }
-
-    const double* times = col->asDoublePtr( );
-    if( !times )
-    {
-        throw std::runtime_error( "Cannot build time index: time column '" + m_timeColumnName + "' is not numeric" );
-    }
-
-    m_timeIndex.clear( );
-    size_t N = col->size( );
-    for( size_t i = 0; i < N; ++i )
-    {
-        m_timeIndex[ times[ i ] ].push_back( i );
-    }
-
-    m_timeIndexBuilt = true;
-}
-
-void ObservationSet::ensureTimeIndex( ) const
-{
-    if( !m_timeIndexBuilt )
-    {
-        const_cast< ObservationSet* >( this )->buildTimeIndex( );
-    }
-}
-
-const std::vector< size_t >& ObservationSet::getRowsAtTime( double time ) const
-{
-    ensureTimeIndex( );
-
-    auto it = m_timeIndex.find( time );
-    if( it == m_timeIndex.end( ) )
-    {
-        static const std::vector< size_t > EMPTY;
-        return EMPTY;
-    }
-    return it->second;
-}
-
-// ----------------------
-// UTASObservationSet
-// ----------------------
-
-UTASObservationSet::UTASObservationSet( const json& j )
-{
-    // 1) find observations array in the JSON
-    const json* observations = nullptr;
-    json meta = json::object( );
-
-    if( j.is_array( ) )
-    {
-        observations = &j;
-    }
-    else if( j.is_object( ) )
-    {
-        // common patterns: { "observations": [...], "meta": {...} } or top-level object with a single array value
-        if( j.contains( "observations" ) && j[ "observations" ].is_array( ) )
-        {
-            observations = &j[ "observations" ];
-        }
-        else
-        {
-            // try to detect the first array property that looks like observations
-            for( auto it = j.begin( ); it != j.end( ); ++it )
-            {
-                if( it.value( ).is_array( ) )
-                {
-                    observations = &it.value( );
-                    break;
-                }
-            }
-        }
-        // metadata: we may have metadata in top-level fields; copy them for later safe lookup
-        meta = j;
-    }
-
-    if( !observations || observations->empty( ) )
-    {
-        throw std::runtime_error( "UTASObservationSet: JSON does not contain an observations array or it is empty" );
-    }
-
-    // 2) Try to read ancillary fields from meta or the first observation
-    const json& firstObs = ( *observations )[ 0 ];
-
-    auto readStringSafe = [ & ]( const json& obj, const std::string& key ) -> std::string {
-        if( obj.contains( key ) && obj[ key ].is_string( ) ) return obj[ key ].get< std::string >( );
-        return std::string( );
-    };
     
-    satNo = readStringSafe( meta, "satNo" ).empty( ) ? readStringSafe( firstObs, "satNo" ) : readStringSafe( meta, "satNo" );
-    dataMode = readStringSafe( meta, "dataMode" ).empty( ) ? readStringSafe( firstObs, "dataMode" ) : readStringSafe( meta, "dataMode" );
-    origSensorId1 = readStringSafe( meta, "origSensorId1" ).empty( ) ? readStringSafe( firstObs, "origSensorId1" )
-                                                                     : readStringSafe( meta, "origSensorId1" );
-    origSensorId2 = readStringSafe( meta, "origSensorId2" ).empty( ) ? readStringSafe( firstObs, "origSensorId2" )
-                                                                     : readStringSafe( meta, "origSensorId2" );
-    origin = readStringSafe( meta, "origin" ).empty( ) ? readStringSafe( firstObs, "origin" ) : readStringSafe( meta, "origin" );
-    source = readStringSafe( meta, "source" ).empty( ) ? readStringSafe( firstObs, "source" ) : readStringSafe( meta, "source" );
-    // ucts may be integer
-    if( meta.contains( "ucts" ) && meta[ "ucts" ].is_number_integer( ) )
+    try
     {
-        ucts = meta[ "ucts" ].get< int >( );
+        return obj[ key ].get< T >( );
     }
-    else if( firstObs.contains( "ucts" ) && firstObs[ "ucts" ].is_number_integer( ) )
+    catch( const json::type_error& e )
     {
-        ucts = firstObs[ "ucts" ].get< int >( );
+        throw std::runtime_error( "UTASObservationSet: Field '" + key + "' has wrong type: " + e.what( ) );
+    }
+}
+
+template< typename T >
+T UTASObservationSet::getOptional( const json& obj, const std::string& key, const T& defaultValue )
+{
+    if( !obj.contains( key ) )
+    {
+        return defaultValue;
+    }
+    
+    try
+    {
+        return obj[ key ].get< T >( );
+    }
+    catch( const json::type_error& )
+    {
+        return defaultValue;
+    }
+}
+
+/**
+ * @brief Get a string field that may be stored as number in JSON
+ * 
+ * Some fields like "satNo" are semantically identifiers (strings) but stored as numbers.
+ */
+static std::string getStringOrNumber( const json& obj, const std::string& key )
+{
+    if( !obj.contains( key ) )
+    {
+        throw std::runtime_error( "UTASObservationSet: Required field '" + key + "' not found" );
+    }
+    
+    const auto& val = obj[ key ];
+    if( val.is_string( ) )
+    {
+        return val.get< std::string >( );
+    }
+    else if( val.is_number_integer( ) )
+    {
+        return std::to_string( val.get< int64_t >( ) );
+    }
+    else if( val.is_number( ) )
+    {
+        // For floating point, convert but this is unusual for IDs
+        std::ostringstream oss;
+        oss << val.get< double >( );
+        return oss.str( );
     }
     else
     {
-        ucts = 0;
+        throw std::runtime_error( "UTASObservationSet: Field '" + key + "' must be string or number" );
     }
+}
 
-    // 3) Determine columns from the keys of the first observation.
-    //    We will create appropriate typed columns based on fieldTypeMap or by simple heuristic.
-    for( auto& el : firstObs.items( ) )
+UTASObservationSet::UTASObservationSet( const json& j )
+{
+    // Initialize time converter
+    timeConverter_ = std::make_shared< teo::TerrestrialTimeScaleConverter >( );
+    
+    // Validate input is array
+    if( !j.is_array( ) )
     {
-        const std::string fieldName = el.key( );
-
-        // If field is declared as ancillary in fieldTypeMap, we still want it as a column if it's actually per-row data
-        // (fieldTypeMap defines types; do not skip creating columns for those unless they are strictly metadata.)
-        std::string declaredType;
-        auto itFt = fieldTypeMap.find( fieldName );
-        if( itFt != fieldTypeMap.end( ) ) declaredType = itFt->second;
-
-        // Create column object depending on declaredType or inference
-        if( declaredType == "string" )
-        {
-            auto col = std::make_shared< TypedColumn< std::string > >( fieldName );
-            addColumn( col );
-        }
-        else if( declaredType == "double" )
-        {
-            auto col = std::make_shared< NumericColumn >( fieldName );
-            addColumn( col );
-        }
-        else
-        {
-            // infer from the first row value
-            const json& v = el.value( );
-            if( v.is_number( ) )
-            {
-                auto col = std::make_shared< NumericColumn >( fieldName );
-                addColumn( col );
-            }
-            else
-            {
-                auto col = std::make_shared< TypedColumn< std::string > >( fieldName );
-                addColumn( col );
-            }
-        }
+        throw std::runtime_error( "UTASObservationSet: JSON input must be an array of observations" );
     }
-
-    // 4) Pre-reserve sizes for numeric columns
-    size_t numRows = observations->size( );
-    for( const auto& name : columnNames( ) )
+    
+    if( j.empty( ) )
     {
-        auto colBase = getColumn( name );
-        if( !colBase ) continue;
-        if( auto numc = std::dynamic_pointer_cast< NumericColumn >( colBase ) )
-        {
-            numc->reserve( numRows );
-        }
-        else if( auto strc = std::dynamic_pointer_cast< TypedColumn< std::string > >( colBase ) )
-        {
-            strc->reserve( numRows );
-        }
+        throw std::runtime_error( "UTASObservationSet: Observation array is empty" );
     }
-
-    // 5) Populate columns row-by-row
-    for( const auto& row : *observations )
+    
+    // Parse metadata from first observation
+    parseMetadata( j[ 0 ] );
+    
+    // Validate constant fields are consistent across all observations
+    validateMetadataConsistency( j );
+    
+    // Parse time-varying data
+    parseTimeSeries( j );
+    
+    // Final validation
+    if( !timeSeries_.isConsistent( ) )
     {
-        for( const auto& name : columnNames( ) )
-        {
-            auto colBase = getColumn( name );
-            if( !colBase ) continue;
-
-            // If column is numeric
-            if( auto numc = std::dynamic_pointer_cast< NumericColumn >( colBase ) )
-            {
-                // prefer numeric types; if missing or non-numeric, push NaN
-                double value = std::numeric_limits< double >::quiet_NaN( );
-                if( row.contains( name ) && row[ name ].is_number( ) )
-                {
-                    value = row[ name ].get< double >( );
-                }
-                else if( row.contains( name ) && row[ name ].is_string( ) )
-                {
-                    // attempt parse string to double if client sometimes sends numbers as strings
-                    try
-                    {
-                        value = std::stod( row[ name ].get< std::string >( ) );
-                    }
-                    catch( ... )
-                    {
-                        value = std::numeric_limits< double >::quiet_NaN( );
-                    }
-                }
-                numc->add( value );
-            }
-            else if( auto strc = std::dynamic_pointer_cast< TypedColumn< std::string > >( colBase ) )
-            {
-                std::string value;
-                if( row.contains( name ) && row[ name ].is_string( ) )
-                {
-                    value = row[ name ].get< std::string >( );
-                }
-                else if( row.contains( name ) && row[ name ].is_number( ) )
-                {
-                    // convert numbers to string
-                    value = std::to_string( row[ name ].get< double >( ) );
-                }
-                else if( row.contains( name ) && row[ name ].is_null( ) )
-                {
-                    value = "";
-                }
-                else
-                {
-                    // missing -> empty string
-                    value = "";
-                }
-                strc->add( value );
-            }
-            else
-            {
-                // unknown column type -> skip
-            }
-        }
+        throw std::runtime_error( "UTASObservationSet: Time series data is inconsistent" );
     }
 }
 
-json UTASObservationSet::toJson( ) const
+void UTASObservationSet::parseMetadata( const json& firstObs )
 {
-    json j;
-    j[ "columns" ] = json::array( );
-
-    for( const auto& name : columnNames( ) )
+    // Station 1 identification and position
+    metadata_.station1Id = getRequired< std::string >( firstObs, "origSensorId1" );
+    metadata_.station1Position.latitude = getRequired< double >( firstObs, "senlat" );
+    metadata_.station1Position.longitude = getRequired< double >( firstObs, "senlon" );
+    metadata_.station1Position.altitude = getRequired< double >( firstObs, "senalt" );
+    
+    // Station 2 identification and position
+    metadata_.station2Id = getRequired< std::string >( firstObs, "origSensorId2" );
+    metadata_.station2Position.latitude = getRequired< double >( firstObs, "sen2lat" );
+    metadata_.station2Position.longitude = getRequired< double >( firstObs, "sen2lon" );
+    metadata_.station2Position.altitude = getRequired< double >( firstObs, "sen2alt" );
+    
+    // Target identification (may be number in JSON)
+    metadata_.targetId = getStringOrNumber( firstObs, "satNo" );
+    
+    // Observation parameters
+    metadata_.frequency = getRequired< double >( firstObs, "frequency" );
+    metadata_.dataMode = getOptional< std::string >( firstObs, "dataMode", "" );
+    metadata_.origin = getOptional< std::string >( firstObs, "origin", "" );
+    metadata_.source = getOptional< std::string >( firstObs, "source", "" );
+    
+    // UTAS-specific fields
+    sensor1Delay_ = getOptional< double >( firstObs, "sensor1Delay", 0.0 );
+    sensor2Delay_ = getOptional< double >( firstObs, "sensor2Delay", 0.0 );
+    bandwidth_ = getOptional< double >( firstObs, "bandwidth", 0.0 );
+    ucts_ = getOptional< int >( firstObs, "ucts", 0 );
+    
+    // Validate positions are not zero (common parsing error indicator)
+    if( metadata_.station1Position.isZero( ) )
     {
-        auto col = getColumn( name );
-        json col_json;
-        col_json[ "name" ] = col->name( );
-        col_json[ "type" ] = col->type( );
-        col_json[ "data" ] = json::array( );
+        std::cerr << "WARNING: Station 1 position is (0,0,0) - this may indicate a parsing error" << std::endl;
+    }
+    if( metadata_.station2Position.isZero( ) )
+    {
+        std::cerr << "WARNING: Station 2 position is (0,0,0) - this may indicate a parsing error" << std::endl;
+    }
+}
 
-        if( col->type( ) == typeid( double ).name( ) )
+void UTASObservationSet::validateMetadataConsistency( const json& observations )
+{
+    const json& first = observations[ 0 ];
+    
+    // List of fields that must be constant across all observations
+    std::vector< std::string > constantStringFields = {
+        "origSensorId1", "origSensorId2", "dataMode", "origin", "source"
+    };
+    std::vector< std::string > constantStringOrNumberFields = {
+        "satNo"  // May be stored as number in JSON
+    };
+    std::vector< std::string > constantDoubleFields = {
+        "senlat", "senlon", "senalt", "sen2lat", "sen2lon", "sen2alt", "frequency"
+    };
+    
+    for( size_t i = 1; i < observations.size( ); ++i )
+    {
+        const json& obs = observations[ i ];
+        
+        // Check string fields
+        for( const auto& field : constantStringFields )
         {
-            auto num_col = std::dynamic_pointer_cast< NumericColumn >( col );
-            for( size_t i = 0; i < num_col->size( ); ++i )
+            if( obs.contains( field ) && first.contains( field ) )
             {
-                col_json[ "data" ].push_back( ( *num_col )[ i ] );
+                if( obs[ field ].get< std::string >( ) != first[ field ].get< std::string >( ) )
+                {
+                    throw std::runtime_error( "UTASObservationSet: Metadata field '" + field + 
+                                              "' varies between observations (expected constant). " +
+                                              "First value: " + first[ field ].get< std::string >( ) +
+                                              ", observation " + std::to_string( i ) + " value: " + 
+                                              obs[ field ].get< std::string >( ) );
+                }
             }
         }
-        else
+        
+        // Check fields that may be string or number (like satNo)
+        for( const auto& field : constantStringOrNumberFields )
         {
-            throw std::runtime_error( "Unsupported column type for serialization: " + col->type( ) );
+            if( obs.contains( field ) && first.contains( field ) )
+            {
+                std::string firstVal = getStringOrNumber( first, field );
+                std::string obsVal = getStringOrNumber( obs, field );
+                if( firstVal != obsVal )
+                {
+                    throw std::runtime_error( "UTASObservationSet: Metadata field '" + field + 
+                                              "' varies between observations (expected constant). " +
+                                              "First value: " + firstVal +
+                                              ", observation " + std::to_string( i ) + " value: " + 
+                                              obsVal );
+                }
+            }
         }
-
-        j[ "columns" ].push_back( col_json );
+        
+        // Check double fields with tolerance
+        const double tolerance = 1e-9;
+        for( const auto& field : constantDoubleFields )
+        {
+            if( obs.contains( field ) && first.contains( field ) )
+            {
+                double firstVal = first[ field ].get< double >( );
+                double obsVal = obs[ field ].get< double >( );
+                if( std::abs( firstVal - obsVal ) > tolerance )
+                {
+                    throw std::runtime_error( "UTASObservationSet: Metadata field '" + field + 
+                                              "' varies between observations (expected constant). " +
+                                              "First value: " + std::to_string( firstVal ) +
+                                              ", observation " + std::to_string( i ) + " value: " + 
+                                              std::to_string( obsVal ) );
+                }
+            }
+        }
     }
-
-    return j;
 }
 
-NumericColumn::NumericColumn( const std::string& name ): TypedColumn< double >( name ) {}
-
-Eigen::Map< Eigen::VectorXd > NumericColumn::asEigenMap( )
+void UTASObservationSet::parseTimeSeries( const json& observations )
 {
-    return Eigen::Map< Eigen::VectorXd >( this->TypedColumn< double >::data( ), this->size( ) );
-}
-
-Eigen::Map< const Eigen::VectorXd > NumericColumn::asEigenMap( ) const
-{
-    return Eigen::Map< const Eigen::VectorXd >( this->TypedColumn< double >::data( ), this->size( ) );
-}
-
-void ObservationSet::addColumn( std::shared_ptr< BaseColumn > col )
-{
-    m_columns[ col->name( ) ] = col;
-    m_order.push_back( col->name( ) );
-}
-
-std::shared_ptr< BaseColumn > ObservationSet::getColumn( const std::string& name ) const
-{
-    auto it = m_columns.find( name );
-    if( it != m_columns.end( ) ) return it->second;
-    return nullptr;
-}
-
-Eigen::Map< const Eigen::VectorXd > ObservationSet::asEigen( const std::string& name ) const
-{
-    auto col = getColumn( name );
-    if( !col ) throw std::runtime_error( "Column not found: " + name );
-
-    const double* ptr = col->asDoublePtr( );
-    if( !ptr ) throw std::runtime_error( "Column is not numeric: " + name );
-
-    return Eigen::Map< const Eigen::VectorXd >( ptr, col->size( ) );
-}
-
-size_t ObservationSet::numRows( ) const
-{
-    if( m_columns.empty( ) ) return 0;
-    return m_columns.begin( )->second->size( );
-}
-
-const std::vector< std::string >& ObservationSet::columnNames( ) const
-{
-    return m_order;
-}
-
-// ----------------------
-// UTASObservationSet constructor with time column
-// ----------------------
-
-UTASObservationSet::UTASObservationSet( const json& j, const std::string& timeColumnName ): UTASObservationSet( j )
-{
-    // 6) Convert obTime string column to epoch numeric column
-    auto obTimeColumn = getColumn( timeColumnName );
-    if( !obTimeColumn ) throw std::runtime_error( "UTASObservationSet: time column '" + timeColumnName + "' not found." );
-
-    auto strCol = std::dynamic_pointer_cast< TypedColumn< std::string > >( obTimeColumn );
-    if( strCol )
+    size_t numObs = observations.size( );
+    
+    // Reserve space
+    timeSeries_.epochs.reserve( numObs );
+    timeSeries_.tdoa.reserve( numObs );
+    timeSeries_.tdoaUnc.reserve( numObs );
+    timeSeries_.fdoa.reserve( numObs );
+    timeSeries_.fdoaUnc.reserve( numObs );
+    
+    for( const auto& obs : observations )
     {
-        // Create a new numeric column for converted times
-        auto epochCol = std::make_shared< NumericColumn >( timeColumnName + "Epoch" );
-        epochCol->reserve( strCol->size( ) );
-
-        for( size_t i = 0; i < strCol->size( ); ++i )
-        {
-            const std::string& isoTime = ( *strCol )[ i ];
-            // try
-            // {
-            auto epoch = convertIsoStringToEpoch( isoTime );
-            epochCol->add( epoch );
-            // }
-            // catch( ... )
-            // {
-            //     epochCol->add( std::numeric_limits< tudat::Time >::quiet_NaN( ) );
-            // }
-        }
-
-        addColumn( epochCol );
-        setTimeColumn( "obTimeEpoch" );
-        buildTimeIndex( );
+        // Time (required)
+        std::string obTime = getRequired< std::string >( obs, "obTime" );
+        double epoch = convertIsoStringToEpoch( obTime );
+        timeSeries_.epochs.push_back( epoch );
+        
+        // TDOA (required)
+        timeSeries_.tdoa.push_back( getRequired< double >( obs, "tdoa" ) );
+        timeSeries_.tdoaUnc.push_back( getOptional< double >( obs, "tdoaUnc", 0.0 ) );
+        
+        // FDOA (required)
+        timeSeries_.fdoa.push_back( getRequired< double >( obs, "fdoa" ) );
+        timeSeries_.fdoaUnc.push_back( getOptional< double >( obs, "fdoaUnc", 0.0 ) );
     }
 }
 
-double UTASObservationSet::convertIsoStringToEpoch( const std::string& t )
+double UTASObservationSet::convertIsoStringToEpoch( const std::string& isoTime )
 {
-    // Simple ISO 8601 to epoch converter (assumes UTC, uses tudat to convert to TBD Time object)
-
-    // Location placeholder
-    Eigen::Vector3d dummyPosition( 6378.0e3, 0.0, 0.0 );
-
-    // Strip z or Z suffix if present
-    std::string timeStr = t;
+    // Strip trailing 'Z' if present
+    std::string timeStr = isoTime;
     if( !timeStr.empty( ) && ( timeStr.back( ) == 'Z' || timeStr.back( ) == 'z' ) )
     {
         timeStr.pop_back( );
     }
-    int year = std::stoi( timeStr.substr( 0, 4 ) );
-    int month = std::stoi( timeStr.substr( 5, 2 ) );
-    int day = std::stoi( timeStr.substr( 8, 2 ) );
-    int hour = std::stoi( timeStr.substr( 11, 2 ) );
-    int minute = std::stoi( timeStr.substr( 14, 2 ) );
-    double second = std::stod( timeStr.substr( 17, timeStr.size( ) - 17 ) );
-    // std::cout << "Parsed time: " << year << "-" << month << "-" << day << " " << hour << ":" << minute << ":" << second << std::endl;
-    // auto reference = tudat::basic_astrodynamics::getJulianDayOnJ2000< long double >( );
-    auto timeInUTC = tba::timeFromDecomposedDateTime< double >( year, month, day, hour, minute, second );
-    auto timeInTBD = defaultTimeScaleConverter->getCurrentTime< double >(
-            tba::TimeScales::utc_scale, tba::TimeScales::tdb_scale, timeInUTC, dummyPosition );
-
-    // std::cout<< "Time difference UTC to TDB: " << timeInTBD - timeInUTC << " seconds." <<std::endl;
-    return timeInTBD;
-}
-
-std::shared_ptr< tom::ObservationCollection< double, double > > BatchVLBI::toTudat( SystemOfBodies& bodies,
-                                                                                    const std::vector< std::string >& included_satellites,
-                                                                                    const std::string& station_body )
-{
-    /* Converts the observations in the batch into a Tudat compatible format and
-          sets up the relevant Tudat infrastructure to support estimation.
-        This method does the following:\\
-            0. Ensures station body exists in the system of bodies.\\
-            1. Creates an empty body for each observed entity with their satId id as name.\\
-            2. Adds this body to the system of bodies inputted to the method.\\
-            3. Retrieves the global position of the terrestrial observatories from the UDL and adds these stations to the Tudat
-       environment.\\
-            4. Creates link definitions between each unique terrestrial
-            observatory/ entity combination in the batch.\\
-            5. Creates a `SingleObservationSet` object for each unique link that
-            includes all observations for that link.\\
-            6. (By Default) Add the relevant weights to the `SingleObservationSet`
-            per observation.\\
-            7. Combine the SingleObservationSet objects into an ObservationCollection
-            and return the observations
-            */
-
-    // Step 0: Ensure station body exists
+    
+    // Parse ISO 8601 format: YYYY-MM-DDTHH:MM:SS.sss
+    if( timeStr.length( ) < 19 )
+    {
+        throw std::runtime_error( "UTASObservationSet: Invalid time format: " + isoTime );
+    }
+    
     try
     {
-        bodies.getBody( station_body );
-        // std::cout << "Station body " << station_body << " already exists in system of bodies." << std::endl;
+        int year = std::stoi( timeStr.substr( 0, 4 ) );
+        int month = std::stoi( timeStr.substr( 5, 2 ) );
+        int day = std::stoi( timeStr.substr( 8, 2 ) );
+        int hour = std::stoi( timeStr.substr( 11, 2 ) );
+        int minute = std::stoi( timeStr.substr( 14, 2 ) );
+        double second = std::stod( timeStr.substr( 17 ) );
+        
+        // Convert to Julian day then to seconds since J2000 (UTC)
+        double timeInUTC = tba::timeFromDecomposedDateTime< double >( year, month, day, hour, minute, second );
+        
+        // Convert UTC to TDB using time scale converter
+        // Use a dummy position (Earth center) - the difference is sub-millisecond
+        Eigen::Vector3d dummyPosition( 6378.0e3, 0.0, 0.0 );
+        double timeInTDB = timeConverter_->getCurrentTime< double >(
+            tba::TimeScales::utc_scale, tba::TimeScales::tdb_scale, timeInUTC, dummyPosition );
+        
+        return timeInTDB;
     }
-    catch( std::runtime_error& e )
+    catch( const std::exception& e )
     {
-        bodies.addBody( std::make_shared< Body >( ), station_body );
+        throw std::runtime_error( "UTASObservationSet: Failed to parse time '" + isoTime + "': " + e.what( ) );
     }
+}
 
-    // Step 1: Create empty bodies for each observed entity
-    auto entities = getObservedObjects( );
-    for( const auto& entity : entities )
+
+// ============================================================================
+// UTASObservationCollection Implementation
+// ============================================================================
+
+UTASObservationCollection::UTASObservationCollection( const std::vector< std::string >& filePaths )
+{
+    for( const auto& path : filePaths )
+    {
+        addFromFile( path );
+    }
+}
+
+void UTASObservationCollection::addFromFile( const std::string& filePath )
+{
+    std::ifstream file( filePath );
+    if( !file.is_open( ) )
+    {
+        throw std::runtime_error( "UTASObservationCollection: Cannot open file: " + filePath );
+    }
+    
+    json j;
+    try
+    {
+        file >> j;
+    }
+    catch( const json::parse_error& e )
+    {
+        throw std::runtime_error( "UTASObservationCollection: JSON parse error in " + filePath + ": " + e.what( ) );
+    }
+    
+    // Handle different JSON structures
+    json observations;
+    if( j.is_array( ) )
+    {
+        observations = j;
+    }
+    else if( j.is_object( ) && j.contains( "observations" ) && j[ "observations" ].is_array( ) )
+    {
+        observations = j[ "observations" ];
+    }
+    else
+    {
+        throw std::runtime_error( "UTASObservationCollection: Unexpected JSON structure in " + filePath );
+    }
+    
+    auto observationSet = std::make_shared< UTASObservationSet >( observations );
+    addSet( observationSet );
+}
+
+void UTASObservationCollection::addSet( std::shared_ptr< UTASObservationSet > observationSet )
+{
+    const auto& meta = observationSet->getMetadata( );
+    
+    // Index by target and station pair
+    std::string target = meta.targetId;
+    auto stationPair = std::make_pair( meta.station1Id, meta.station2Id );
+    
+    observationsByTarget_[ target ][ stationPair ].push_back( observationSet );
+    
+    // Accumulate station positions
+    if( stationPositions_.find( meta.station1Id ) == stationPositions_.end( ) )
+    {
+        stationPositions_[ meta.station1Id ] = meta.station1Position;
+    }
+    if( stationPositions_.find( meta.station2Id ) == stationPositions_.end( ) )
+    {
+        stationPositions_[ meta.station2Id ] = meta.station2Position;
+    }
+}
+
+std::set< std::string > UTASObservationCollection::getObservatoryNames( ) const
+{
+    std::set< std::string > names;
+    for( const auto& entry : stationPositions_ )
+    {
+        names.insert( entry.first );
+    }
+    return names;
+}
+
+std::map< std::string, GeodeticPosition > UTASObservationCollection::getObservatoryPositions( ) const
+{
+    return stationPositions_;
+}
+
+std::set< std::string > UTASObservationCollection::getObservedTargets( ) const
+{
+    std::set< std::string > targets;
+    for( const auto& entry : observationsByTarget_ )
+    {
+        targets.insert( entry.first );
+    }
+    return targets;
+}
+
+
+// ============================================================================
+// UTASTudatFormatter Implementation
+// ============================================================================
+
+Eigen::Vector3d UTASTudatFormatter::convertToTudatGeodetic( const GeodeticPosition& pos ) const
+{
+    double longitude = pos.longitude;
+    double latitude = pos.latitude;
+    double altitude = pos.altitude;
+    
+    // Convert angles to radians if needed
+    if( inputAngleUnit_ == AngleUnit::Degrees )
+    {
+        longitude *= mathematical_constants::PI / 180.0;
+        latitude *= mathematical_constants::PI / 180.0;
+    }
+    
+    // Convert altitude to meters if needed
+    if( inputLengthUnit_ == LengthUnit::Kilometers )
+    {
+        altitude *= 1000.0;
+    }
+    
+    // Tudat expects: (longitude, latitude, altitude) in (rad, rad, m)
+    return Eigen::Vector3d( longitude, latitude, altitude );
+}
+
+std::shared_ptr< tom::ObservationCollection< double, double > > 
+UTASTudatFormatter::toTudat( const UTASObservationCollection& collection,
+                             simulation_setup::SystemOfBodies& bodies,
+                             const std::vector< std::string >& includedTargets,
+                             const std::string& stationBody )
+{
+    // Ensure station body exists
+    try
+    {
+        bodies.getBody( stationBody );
+    }
+    catch( const std::runtime_error& )
+    {
+        bodies.addBody( std::make_shared< simulation_setup::Body >( ), stationBody );
+    }
+    
+    // Create ground stations
+    auto observatoryPositions = collection.getObservatoryPositions( );
+    for( const auto& entry : observatoryPositions )
+    {
+        const std::string& stationName = entry.first;
+        const GeodeticPosition& pos = entry.second;
+        
+        std::cout << "Adding ground station " << stationName << " to body " << stationBody << std::endl;
+        std::cout << "    Input position (deg, deg, km): " 
+                  << pos.latitude << ", " << pos.longitude << ", " << pos.altitude << std::endl;
+        
+        Eigen::Vector3d tudatPos = convertToTudatGeodetic( pos );
+        
+        std::cout << "    Tudat position (rad, rad, m): " 
+                  << tudatPos( 1 ) << ", " << tudatPos( 0 ) << ", " << tudatPos( 2 ) << std::endl;
+        
+        simulation_setup::createGroundStation(
+            bodies.getBody( stationBody ), 
+            stationName, 
+            tudatPos,
+            coordinate_conversions::geodetic_position );
+    }
+    
+    // Determine which targets to include
+    std::set< std::string > targetSet;
+    if( includedTargets.empty( ) )
+    {
+        targetSet = collection.getObservedTargets( );
+    }
+    else
+    {
+        for( const auto& t : includedTargets )
+        {
+            targetSet.insert( t );
+        }
+    }
+    
+    // Debug: print available and requested targets
+    std::cout << "Available targets in data: ";
+    for( const auto& t : collection.getObservedTargets( ) )
+    {
+        std::cout << "'" << t << "' ";
+    }
+    std::cout << std::endl;
+    std::cout << "Requested targets: ";
+    for( const auto& t : targetSet )
+    {
+        std::cout << "'" << t << "' ";
+    }
+    std::cout << std::endl;
+    
+    // Create empty bodies for targets
+    for( const auto& target : targetSet )
     {
         try
         {
-            bodies.getBody( entity );
-            std::cout << "Body " << entity << " already exists in system of bodies." << std::endl;
+            bodies.getBody( target );
+            std::cout << "Target body " << target << " already exists" << std::endl;
         }
-        catch( std::runtime_error& e )
+        catch( const std::runtime_error& )
         {
-            // Step 2: Add body to system of bodies
-            bodies.addBody( std::make_shared< Body >( ), entity );
+            bodies.addBody( std::make_shared< simulation_setup::Body >( ), target );
         }
     }
-
-    // Step 3: Add terrestrial observatories to Tudat environment
-    auto observatoryMap = getObservatoryPositions( );
-    for( const auto& observatory : observatoryMap )
-    {
-        auto geodeticCoordinates = Eigen::Vector3d( observatory.second[ 0 ] / 180.0 * mathematical_constants::PI,
-                                                    observatory.second[ 1 ] / 180.0 * mathematical_constants::PI,
-                                                    observatory.second[ 2 ] * 1000.0 );  // Convert km to m
-        createGroundStation(
-                bodies.getBody( station_body ), observatory.first, geodeticCoordinates, coordinate_conversions::geodetic_position );
-    }
-
-    // Step 4: Create link ends and observation models for each unique entity/(observatory pair) pair
-
-    // Map:
-    //  - Key: observed object,
-    //  - Value: map:
-    //       -- Key: pair(Observatory1, Observatory2)
-    //       -- Value: vector of observation set pointers
-    auto objectObservatoryPairs = getAllObservations( );
+    
+    // Build observation sets
     std::vector< std::shared_ptr< tom::SingleObservationSet< double, double > > > observationSetList;
-    for( const auto& setup : objectObservatoryPairs )
+    
+    const auto& allObs = collection.getAllObservations( );
+    for( const auto& targetEntry : allObs )
     {
-        for( const auto& observationSetPtr : setup.second )
+        const std::string& target = targetEntry.first;
+        if( targetSet.find( target ) == targetSet.end( ) )
         {
-            std::string entity = setup.first;
-            std::string observatory1 = observationSetPtr.first.first;
-            std::string observatory2 = observationSetPtr.first.second;
-            auto data = observationSetPtr.second;
-
+            continue;  // Skip targets not in inclusion list
+        }
+        
+        for( const auto& stationPairEntry : targetEntry.second )
+        {
+            const auto& stationPair = stationPairEntry.first;
+            const auto& observationSets = stationPairEntry.second;
+            
+            const std::string& station1 = stationPair.first;
+            const std::string& station2 = stationPair.second;
+            
+            // Create link definition
             tom::LinkEnds linkEnds;
-            linkEnds[ observation_models::receiver ] = std::make_pair( observatory1, station_body );
-            linkEnds[ observation_models::receiver2 ] = std::make_pair( observatory2, station_body );
-            linkEnds[ observation_models::transmitter2 ] = std::make_pair( entity, std::string( "" ) );
-            auto linkDefinition = tom::LinkDefinition( linkEnds );
-
-            // Step 5: Create SingleObservationSet for each unique link
-
-            // Compile all observation times and observations for this link
+            linkEnds[ tom::receiver ] = std::make_pair( station1, stationBody );
+            linkEnds[ tom::receiver2 ] = std::make_pair( station2, stationBody );
+            linkEnds[ tom::transmitter2 ] = std::make_pair( target, std::string( "" ) );
+            tom::LinkDefinition linkDefinition( linkEnds );
+            
+            // Accumulate observations from all sets for this link
             std::vector< double > observationTimes;
             std::vector< Eigen::VectorXd > tdoaObservations;
-            for( const auto& set : data )
+            std::vector< Eigen::VectorXd > fdoaObservations;
+            
+            for( const auto& obsSet : observationSets )
             {
-                auto timeCol = std::dynamic_pointer_cast< NumericColumn >( set->getColumn( "obTimeEpoch" ) );
-                auto tdoaCol = std::dynamic_pointer_cast< NumericColumn >( set->getColumn( "tdoa" ) );
-
-                observationTimes.insert(
-                        observationTimes.end( ), std::make_move_iterator( timeCol->begin( ) ), std::make_move_iterator( timeCol->end( ) ) );
-                for( auto it = tdoaCol->begin( ); it != tdoaCol->end( ); ++it )
+                const auto& timeSeries = obsSet->getTimeSeries( );
+                
+                for( size_t i = 0; i < timeSeries.size( ); ++i )
                 {
-                    Eigen::VectorXd entry( 1 );
-                    entry( 0 ) = *it;
-                    tdoaObservations.push_back( entry );
+                    observationTimes.push_back( timeSeries.epochs[ i ] );
+                    
+                    Eigen::VectorXd tdoaEntry( 1 );
+                    tdoaEntry( 0 ) = timeSeries.tdoa[ i ];
+                    tdoaObservations.push_back( tdoaEntry );
+                    
+                    Eigen::VectorXd fdoaEntry( 1 );
+                    fdoaEntry( 0 ) = timeSeries.fdoa[ i ];
+                    fdoaObservations.push_back( fdoaEntry );
                 }
             }
-
-            auto observationSet =
-                    std::make_shared< tom::SingleObservationSet< double, double > >( tom::differenced_time_of_arrival,
-                                                                                     linkDefinition,
-                                                                                     tdoaObservations,
-                                                                                     observationTimes,
-                                                                                     tom::receiver );  // TODO confirm reference LinkEndType
-            observationSetList.push_back( observationSet );
+            
+            // Create TDOA observation set
+            auto tdoaSet = std::make_shared< tom::SingleObservationSet< double, double > >(
+                tom::differenced_time_of_arrival,
+                linkDefinition,
+                tdoaObservations,
+                observationTimes,
+                tom::receiver );
+            observationSetList.push_back( tdoaSet );
+            
+            // Create FDOA observation set
+            auto fdoaSet = std::make_shared< tom::SingleObservationSet< double, double > >(
+                tom::differenced_frequency_of_arrival,
+                linkDefinition,
+                fdoaObservations,
+                observationTimes,
+                tom::receiver );
+            observationSetList.push_back( fdoaSet );
         }
     }
-    // Step 6: Add weights to each SingleObservationSet TODO Implement (by standard deviation?)
-
-    // Step 7: Create ObservationCollection from SingleObservationSets
-    auto observationCollection = std::make_shared< tom::ObservationCollection< double, double > >( observationSetList );
-    return observationCollection;
+    
+    return std::make_shared< tom::ObservationCollection< double, double > >( observationSetList );
 }
+
+
+// ============================================================================
+// BatchVLBI Implementation
+// ============================================================================
+
+BatchVLBI::BatchVLBI( const std::vector< std::string >& filePaths )
+    : collection_( filePaths ), formatter_( )
+{
+}
+
+std::shared_ptr< tom::ObservationCollection< double, double > > 
+BatchVLBI::toTudat( simulation_setup::SystemOfBodies& bodies,
+                    const std::vector< std::string >& includedTargets,
+                    const std::string& stationBody )
+{
+    return formatter_.toTudat( collection_, bodies, includedTargets, stationBody );
+}
+
+
 }  // namespace io
 }  // namespace tudat

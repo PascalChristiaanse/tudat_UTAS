@@ -81,7 +81,7 @@ function("TUDAT_ADD_TEST_CASE" arg1)
 
         target_link_libraries("${target_name}"
                 PUBLIC ${PARSED_ARGS_PRIVATE_LINKS}
-                PRIVATE "${Boost_LIBRARIES}"
+                PRIVATE ${Boost_LIBRARIES}
                 )
 
         #==========================================================================

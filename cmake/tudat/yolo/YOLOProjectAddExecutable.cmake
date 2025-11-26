@@ -27,7 +27,7 @@ function(TUDAT_ADD_EXECUTABLE arg1 arg2)
     message(STATUS LIB:BOOST:${Boost_LIBRARIES})
     target_link_libraries("${target_name}"
             PUBLIC    ${ARGN}
-            PRIVATE   "${Boost_LIBRARIES}"
+            PRIVATE   ${Boost_LIBRARIES}
             )
 
     #==========================================================================

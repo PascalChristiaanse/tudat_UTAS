@@ -260,7 +260,6 @@ public:
      * This creates an XDMF3 file that references the HDF5 data and can be
      * opened directly in ParaView. It includes:
      * - Static polyline trajectories
-     * - Animated particle positions
      * - Velocity vectors (for glyph visualization)
      * - Dependent variables as scalar/vector attributes
      */

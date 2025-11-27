@@ -186,36 +186,79 @@ void TrajectoryXDMFGenerator::writeConnectivityToHDF5( )
 {
     for ( auto& config : trajectoryConfigs_ )
     {
-        if ( config.generateStaticPolyline && config.numTimeSteps > 0 )
+        if ( config.numTimeSteps > 0 )
         {
-            // Create connectivity array [0, 1, 2, ..., N-1]
-            std::vector< int > connectivity( config.numTimeSteps );
-            for ( size_t i = 0; i < config.numTimeSteps; ++i )
-            {
-                connectivity[ i ] = static_cast< int >( i );
-            }
-            
-            // Open HDF5 file and write connectivity
+            // Open HDF5 file for reading states and writing derived datasets
             HighFive::File h5File( config.h5FilePath, HighFive::File::ReadWrite );
             
-            // Determine connectivity dataset path
-            if ( config.connectivityDataset.empty( ) )
+            // Determine base path from states dataset
+            size_t lastSlash = config.statesDataset.find_last_of( '/' );
+            std::string basePath = ( lastSlash != std::string::npos ) 
+                ? config.statesDataset.substr( 0, lastSlash + 1 )
+                : "/";
+            
+            // Read full states once (we'll extract positions and velocities)
+            std::vector< std::vector< double > > states;
+            h5File.getDataSet( config.statesDataset ).read( states );
+            
+            // Write connectivity if needed for polyline
+            if ( config.generateStaticPolyline )
             {
-                // Derive from states dataset path
-                size_t lastSlash = config.statesDataset.find_last_of( '/' );
-                std::string basePath = ( lastSlash != std::string::npos ) 
-                    ? config.statesDataset.substr( 0, lastSlash + 1 )
-                    : "/";
-                config.connectivityDataset = basePath + "connectivity";
+                if ( config.connectivityDataset.empty( ) )
+                {
+                    config.connectivityDataset = basePath + "connectivity";
+                }
+                
+                if ( !h5File.exist( config.connectivityDataset ) )
+                {
+                    std::vector< int > connectivity( config.numTimeSteps );
+                    for ( size_t i = 0; i < config.numTimeSteps; ++i )
+                    {
+                        connectivity[ i ] = static_cast< int >( i );
+                    }
+                    h5File.createDataSet< int >( 
+                        config.connectivityDataset, 
+                        HighFive::DataSpace( { config.numTimeSteps } ) 
+                    ).write( connectivity );
+                }
             }
             
-            // Check if dataset already exists
-            if ( !h5File.exist( config.connectivityDataset ) )
+            // Pre-extract positions (N x 3) for ParaView compatibility
+            // ParaView doesn't handle JOIN() with HyperSlab well for Geometry
+            config.positionsDataset = basePath + "positions_xyz";
+            if ( !h5File.exist( config.positionsDataset ) )
             {
-                h5File.createDataSet< int >( 
-                    config.connectivityDataset, 
-                    HighFive::DataSpace( { config.numTimeSteps } ) 
-                ).write( connectivity );
+                std::vector< std::vector< double > > positions( config.numTimeSteps, std::vector< double >( 3 ) );
+                for ( size_t i = 0; i < config.numTimeSteps; ++i )
+                {
+                    positions[i][0] = states[i][config.positionIndices[0]];
+                    positions[i][1] = states[i][config.positionIndices[1]];
+                    positions[i][2] = states[i][config.positionIndices[2]];
+                }
+                h5File.createDataSet< double >( 
+                    config.positionsDataset, 
+                    HighFive::DataSpace( { config.numTimeSteps, 3 } ) 
+                ).write( positions );
+            }
+            
+            // Pre-extract velocities (N x 3) if needed
+            if ( config.includeVelocityVector )
+            {
+                config.velocitiesDataset = basePath + "velocities_xyz";
+                if ( !h5File.exist( config.velocitiesDataset ) )
+                {
+                    std::vector< std::vector< double > > velocities( config.numTimeSteps, std::vector< double >( 3 ) );
+                    for ( size_t i = 0; i < config.numTimeSteps; ++i )
+                    {
+                        velocities[i][0] = states[i][config.velocityIndices[0]];
+                        velocities[i][1] = states[i][config.velocityIndices[1]];
+                        velocities[i][2] = states[i][config.velocityIndices[2]];
+                    }
+                    h5File.createDataSet< double >( 
+                        config.velocitiesDataset, 
+                        HighFive::DataSpace( { config.numTimeSteps, 3 } ) 
+                    ).write( velocities );
+                }
             }
         }
     }
@@ -223,16 +266,12 @@ void TrajectoryXDMFGenerator::writeConnectivityToHDF5( )
 
 void TrajectoryXDMFGenerator::generateGrids( std::ostream& os )
 {
+    // Generate per-trajectory static polylines
     for ( const auto& config : trajectoryConfigs_ )
     {
         if ( config.generateStaticPolyline )
         {
             generateStaticTrajectory( os, config, 2 );
-        }
-        
-        if ( config.generateAnimatedParticle )
-        {
-            generateAnimatedParticle( os, config, 2 );
         }
     }
 }
@@ -277,60 +316,16 @@ void TrajectoryXDMFGenerator::generateStaticTrajectory( std::ostream& os,
     os << ind << "</Grid>\n";
 }
 
-void TrajectoryXDMFGenerator::generateAnimatedParticle( std::ostream& os,
-                                                         const TrajectoryConfig& config,
-                                                         int indentLevel )
-{
-    std::string ind = indent( indentLevel );
-    std::string filename = getFilename( config.h5FilePath );
-    
-    os << "\n" << ind << "<!-- Animated particle for " << config.bodyName << " -->\n";
-    os << ind << "<Grid Name=\"" << config.bodyName << "_Particle\" GridType=\"Collection\" CollectionType=\"Temporal\">\n";
-    
-    // We need to read the times from the HDF5 file
-    std::vector< double > times;
-    {
-        HighFive::File h5File( config.h5FilePath, HighFive::File::ReadOnly );
-        auto timesDataset = h5File.getDataSet( config.timesDataset );
-        timesDataset.read( times );
-    }
-    
-    for ( size_t i = 0; i < config.numTimeSteps; ++i )
-    {
-        os << ind << "  <Grid Name=\"" << config.bodyName << "_t" << i << "\" GridType=\"Uniform\">\n";
-        os << ind << "    <Time Value=\"" << times[ i ] << "\"/>\n";
-        
-        // Single point topology
-        os << ind << "    <Topology TopologyType=\"Polyvertex\" NumberOfElements=\"1\"/>\n";
-        
-        // Geometry: single point position using HyperSlab
-        os << ind << "    <Geometry GeometryType=\"XYZ\">\n";
-        writeTimestepPositionGeometry( os, config, i, indentLevel + 3 );
-        os << ind << "    </Geometry>\n";
-        
-        // Velocity vector for this timestep
-        if ( config.includeVelocityVector )
-        {
-            writeTimestepVelocityAttribute( os, config, i, indentLevel + 2 );
-        }
-        
-        os << ind << "  </Grid>\n";
-    }
-    
-    os << ind << "</Grid>\n";
-}
-
 void TrajectoryXDMFGenerator::writePositionGeometry( std::ostream& os,
                                                       const TrajectoryConfig& config,
                                                       int indentLevel )
 {
-    writeJoinedColumnsDataItem( os, 
-                                config.h5FilePath,
-                                config.statesDataset,
-                                { config.numTimeSteps, config.stateSize },
-                                config.numTimeSteps,
-                                config.positionIndices,
-                                "Float", 8, indentLevel );
+    // Use pre-extracted positions dataset (N x 3) - simple, no HyperSlab/JOIN needed
+    writeHDF5DataItem( os, 
+                       config.h5FilePath,
+                       config.positionsDataset,
+                       { config.numTimeSteps, 3 },
+                       "Float", 8, indentLevel );
 }
 
 void TrajectoryXDMFGenerator::writeVelocityAttribute( std::ostream& os,
@@ -340,13 +335,12 @@ void TrajectoryXDMFGenerator::writeVelocityAttribute( std::ostream& os,
     std::string ind = indent( indentLevel );
     
     os << ind << "<Attribute Name=\"Velocity\" AttributeType=\"Vector\" Center=\"Node\">\n";
-    writeJoinedColumnsDataItem( os,
-                                config.h5FilePath,
-                                config.statesDataset,
-                                { config.numTimeSteps, config.stateSize },
-                                config.numTimeSteps,
-                                config.velocityIndices,
-                                "Float", 8, indentLevel + 1 );
+    // Use pre-extracted velocities dataset (N x 3)
+    writeHDF5DataItem( os,
+                       config.h5FilePath,
+                       config.velocitiesDataset,
+                       { config.numTimeSteps, 3 },
+                       "Float", 8, indentLevel + 1 );
     os << ind << "</Attribute>\n";
 }
 
@@ -398,66 +392,6 @@ void TrajectoryXDMFGenerator::writeDependentVariableAttributes( std::ostream& os
         
         os << ind << "</Attribute>\n";
     }
-}
-
-void TrajectoryXDMFGenerator::writeTimestepPositionGeometry( std::ostream& os,
-                                                              const TrajectoryConfig& config,
-                                                              size_t timeIndex,
-                                                              int indentLevel )
-{
-    std::string ind = indent( indentLevel );
-    std::string filename = getFilename( config.h5FilePath );
-    
-    // Extract single row, then join the position columns
-    // For a single point, we use a simpler approach: extract x, y, z separately and JOIN
-    os << ind << "<DataItem ItemType=\"Function\" Function=\"JOIN($0, $1, $2)\" Dimensions=\"1 3\">\n";
-    
-    for ( int col : config.positionIndices )
-    {
-        os << ind << "  <DataItem ItemType=\"HyperSlab\" Dimensions=\"1\" Type=\"HyperSlab\">\n";
-        os << ind << "    <DataItem Dimensions=\"3 2\" Format=\"XML\">\n";
-        os << ind << "      " << timeIndex << " " << col << "\n";
-        os << ind << "      1 1\n";
-        os << ind << "      1 1\n";
-        os << ind << "    </DataItem>\n";
-        os << ind << "    <DataItem Dimensions=\"" << config.numTimeSteps << " " << config.stateSize 
-           << "\" NumberType=\"Float\" Precision=\"8\" Format=\"HDF\">\n";
-        os << ind << "      " << filename << ":" << config.statesDataset << "\n";
-        os << ind << "    </DataItem>\n";
-        os << ind << "  </DataItem>\n";
-    }
-    
-    os << ind << "</DataItem>\n";
-}
-
-void TrajectoryXDMFGenerator::writeTimestepVelocityAttribute( std::ostream& os,
-                                                               const TrajectoryConfig& config,
-                                                               size_t timeIndex,
-                                                               int indentLevel )
-{
-    std::string ind = indent( indentLevel );
-    std::string filename = getFilename( config.h5FilePath );
-    
-    os << ind << "<Attribute Name=\"Velocity\" AttributeType=\"Vector\" Center=\"Node\">\n";
-    os << ind << "  <DataItem ItemType=\"Function\" Function=\"JOIN($0, $1, $2)\" Dimensions=\"1 3\">\n";
-    
-    for ( int col : config.velocityIndices )
-    {
-        os << ind << "    <DataItem ItemType=\"HyperSlab\" Dimensions=\"1\" Type=\"HyperSlab\">\n";
-        os << ind << "      <DataItem Dimensions=\"3 2\" Format=\"XML\">\n";
-        os << ind << "        " << timeIndex << " " << col << "\n";
-        os << ind << "        1 1\n";
-        os << ind << "        1 1\n";
-        os << ind << "      </DataItem>\n";
-        os << ind << "      <DataItem Dimensions=\"" << config.numTimeSteps << " " << config.stateSize 
-           << "\" NumberType=\"Float\" Precision=\"8\" Format=\"HDF\">\n";
-        os << ind << "        " << filename << ":" << config.statesDataset << "\n";
-        os << ind << "      </DataItem>\n";
-        os << ind << "    </DataItem>\n";
-    }
-    
-    os << ind << "  </DataItem>\n";
-    os << ind << "</Attribute>\n";
 }
 
 // ================================================================================================

@@ -28,6 +28,7 @@ namespace io
 
 HDF5OutputFile::HDF5OutputFile( const std::string& filePath, bool overwrite )
     : file_( filePath, overwrite ? HighFive::File::Overwrite : HighFive::File::OpenOrCreate ),
+      filePath_( filePath ),
       isOpen_( true )
 {
 }
@@ -112,6 +113,41 @@ void HDF5OutputFile::writeIdMapping(
     // For string arrays, HighFive handles them directly
     subgroup.createDataSet< std::string >( "names", HighFive::DataSpace( { names.size( ) } ) )
             .write( names );
+}
+
+void HDF5OutputFile::generateXDMF( const std::string& xdmfFilePath )
+{
+    if ( trajectoryConfigs_.empty( ) )
+    {
+        std::cerr << "Warning: No trajectories to export to XDMF" << std::endl;
+        return;
+    }
+    
+    // Create trajectory XDMF generator
+    TrajectoryXDMFGenerator xdmfGenerator( trajectoryConfigs_ );
+    
+    // Write connectivity datasets to HDF5 (must be done before XDMF generation)
+    xdmfGenerator.writeConnectivityToHDF5( );
+    
+    // Write the XDMF file
+    xdmfGenerator.write( xdmfFilePath );
+}
+
+void HDF5OutputFile::generateXDMF( )
+{
+    // Generate default XDMF path (same as HDF5 but with .xdmf extension)
+    std::string xdmfPath = filePath_;
+    size_t dotPos = xdmfPath.find_last_of( '.' );
+    if ( dotPos != std::string::npos )
+    {
+        xdmfPath = xdmfPath.substr( 0, dotPos ) + ".xdmf";
+    }
+    else
+    {
+        xdmfPath += ".xdmf";
+    }
+    
+    generateXDMF( xdmfPath );
 }
 
 }  // namespace io

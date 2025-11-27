@@ -44,6 +44,7 @@ set(io_SOURCES
         "readIonexFile.cpp"
         "unifiedDataLibraryReader.cpp"
         "hdf5Manager.cpp"
+        "xdmfGenerator.cpp"
 )
 
 # Add header files.
@@ -87,6 +88,7 @@ set(io_HEADERS
         "readVariousPdsFiles.h"
         "unifiedDataLibraryReader.h"
         "hdf5Manager.h"
+        "xdmfGenerator.h"
         )
 
 # Add library.

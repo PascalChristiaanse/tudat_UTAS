@@ -162,6 +162,9 @@ int main()
     // Add the simulation results (includes metadata automatically)
     hdf5File.addSingleArcResults( propagationResults, "Satellite" );
 
+    // Generate XDMF descriptor for ParaView visualization
+    hdf5File.generateXDMF( );
+
     // Close the file
     hdf5File.close();
 
@@ -170,6 +173,11 @@ int main()
 
     std::cout << "\n=== Example Complete ===" << std::endl;
     std::cout << "Open the .xdmf file in ParaView to visualize the trajectory." << std::endl;
+    std::cout << "Tips:" << std::endl;
+    std::cout << "  - Use 'Xdmf3ReaderS' for static trajectory polyline" << std::endl;
+    std::cout << "  - Use 'Xdmf3ReaderT' for animated particle" << std::endl;
+    std::cout << "  - Apply 'Glyph' filter with Arrow source on Velocity for direction arrows" << std::endl;
+    std::cout << "  - Apply 'Tube' filter on trajectory for 3D tube visualization" << std::endl;
 
     return 0;
 }

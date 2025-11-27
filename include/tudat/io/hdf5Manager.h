@@ -33,6 +33,7 @@
 #include "tudat/basics/timeType.h"
 #include "tudat/simulation/propagation_setup/propagationResults.h"
 #include "tudat/simulation/propagation_setup/dependentVariablesInterface.h"
+#include "tudat/io/xdmfGenerator.h"
 
 namespace tudat
 {
@@ -251,6 +252,42 @@ public:
      * @brief Close the file explicitly
      */
     void close( );
+    
+    /**
+     * @brief Generate XDMF descriptor file for ParaView visualization
+     * @param xdmfFilePath Path to the XDMF file to create
+     * 
+     * This creates an XDMF3 file that references the HDF5 data and can be
+     * opened directly in ParaView. It includes:
+     * - Static polyline trajectories
+     * - Animated particle positions
+     * - Velocity vectors (for glyph visualization)
+     * - Dependent variables as scalar/vector attributes
+     */
+    void generateXDMF( const std::string& xdmfFilePath );
+    
+    /**
+     * @brief Generate XDMF descriptor file with default name (same as HDF5 but .xdmf)
+     */
+    void generateXDMF( );
+    
+    /**
+     * @brief Get the trajectory configurations for all stored trajectories
+     * @return Vector of TrajectoryConfig objects
+     */
+    std::vector< TrajectoryConfig > getTrajectoryConfigs( ) const
+    {
+        return trajectoryConfigs_;
+    }
+    
+    /**
+     * @brief Get the file path
+     * @return The path to the HDF5 file
+     */
+    std::string getFilePath( ) const
+    {
+        return filePath_;
+    }
 
 private:
     /**
@@ -284,7 +321,9 @@ private:
         const std::shared_ptr< propagators::SingleArcSimulationResults< StateScalarType, TimeType > >& results );
     
     HighFive::File file_;
+    std::string filePath_;
     bool isOpen_;
+    std::vector< TrajectoryConfig > trajectoryConfigs_;
 };
 
 // ================================================================================================
@@ -361,6 +400,61 @@ void HDF5OutputFile::addSingleArcResults(
     
     // Write metadata
     writeMetadata( bodyGroup, results );
+    
+    // Track trajectory configuration for XDMF generation
+    TrajectoryConfig trajConfig;
+    trajConfig.bodyName = bodyName;
+    trajConfig.h5FilePath = filePath_;
+    trajConfig.statesDataset = fullPath + "/states";
+    trajConfig.timesDataset = fullPath + "/times";
+    trajConfig.connectivityDataset = fullPath + "/connectivity";
+    
+    if ( !stateHistory.empty( ) )
+    {
+        trajConfig.numTimeSteps = stateHistory.size( );
+        trajConfig.stateSize = stateHistory.begin( )->second.size( );
+    }
+    
+    // Set up dependent variable attributes
+    if ( !depVarHistory.empty( ) && !depVarIds.empty( ) )
+    {
+        trajConfig.dependentVariablesDataset = fullPath + "/dependent_variables";
+        trajConfig.dependentVariablesSize = depVarHistory.begin( )->second.size( );
+        
+        // Create XDMF attribute config for each dependent variable
+        for ( const auto& [indexPair, name] : depVarIds )
+        {
+            XDMFAttributeConfig attrConfig;
+            attrConfig.name = name;
+            attrConfig.h5FilePath = filePath_;
+            attrConfig.datasetPath = fullPath + "/dependent_variables";
+            attrConfig.numElements = trajConfig.numTimeSteps;
+            
+            int startIdx = indexPair.first;
+            int size = indexPair.second;
+            
+            if ( size == 1 )
+            {
+                attrConfig.type = XDMFAttributeType::Scalar;
+                attrConfig.columnIndices = { startIdx };
+            }
+            else if ( size == 3 )
+            {
+                attrConfig.type = XDMFAttributeType::Vector;
+                attrConfig.columnIndices = { startIdx, startIdx + 1, startIdx + 2 };
+            }
+            else
+            {
+                // For other sizes, treat as scalar (first element only) or skip
+                attrConfig.type = XDMFAttributeType::Scalar;
+                attrConfig.columnIndices = { startIdx };
+            }
+            
+            trajConfig.dependentVariableAttributes.push_back( attrConfig );
+        }
+    }
+    
+    trajectoryConfigs_.push_back( trajConfig );
 }
 
 template< typename StateScalarType, typename TimeType >

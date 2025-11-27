@@ -1,0 +1,529 @@
+/*    Copyright (c) 2010-2019, Delft University of Technology
+ *    All rigths reserved
+ *
+ *    This file is part of the Tudat. Redistribution and use in source and
+ *    binary forms, with or without modification, are permitted exclusively
+ *    under the terms of the Modified BSD license. You should have received
+ *    a copy of the license with this file. If not, please or visit:
+ *    http://tudat.tudelft.nl/LICENSE.
+ */
+
+#include "tudat/io/xdmfGenerator.h"
+
+namespace tudat
+{
+namespace io
+{
+
+// ================================================================================================
+// XDMFGeneratorBase implementation
+// ================================================================================================
+
+void XDMFGeneratorBase::write( const std::string& xdmfFilePath )
+{
+    std::ofstream xdmfFile( xdmfFilePath );
+    if ( !xdmfFile.is_open( ) )
+    {
+        throw std::runtime_error( "Failed to open XDMF file for writing: " + xdmfFilePath );
+    }
+    
+    writeHeader( xdmfFile );
+    generateGrids( xdmfFile );
+    writeFooter( xdmfFile );
+    
+    xdmfFile.close( );
+}
+
+void XDMFGeneratorBase::writeHeader( std::ostream& os )
+{
+    os << R"(<?xml version="1.0" ?>
+<!DOCTYPE Xdmf SYSTEM "Xdmf.dtd" []>
+<Xdmf Version="3.0">
+  <Domain>
+)";
+}
+
+void XDMFGeneratorBase::writeFooter( std::ostream& os )
+{
+    os << R"(  </Domain>
+</Xdmf>
+)";
+}
+
+std::string XDMFGeneratorBase::getFilename( const std::string& path ) const
+{
+    size_t lastSlash = path.find_last_of( "/\\" );
+    if ( lastSlash == std::string::npos )
+    {
+        return path;
+    }
+    return path.substr( lastSlash + 1 );
+}
+
+void XDMFGeneratorBase::writeHDF5DataItem( std::ostream& os,
+                                            const std::string& h5FilePath,
+                                            const std::string& datasetPath,
+                                            const std::vector< size_t >& dimensions,
+                                            const std::string& numberType,
+                                            int precision,
+                                            int indentLevel )
+{
+    std::string ind = indent( indentLevel );
+    std::string filename = getFilename( h5FilePath );
+    
+    os << ind << "<DataItem Dimensions=\"";
+    for ( size_t i = 0; i < dimensions.size( ); ++i )
+    {
+        if ( i > 0 ) os << " ";
+        os << dimensions[ i ];
+    }
+    os << "\" NumberType=\"" << numberType << "\" Precision=\"" << precision 
+       << "\" Format=\"HDF\">\n";
+    os << ind << "  " << filename << ":" << datasetPath << "\n";
+    os << ind << "</DataItem>\n";
+}
+
+void XDMFGeneratorBase::writeHDF5HyperSlabDataItem( std::ostream& os,
+                                                     const std::string& h5FilePath,
+                                                     const std::string& datasetPath,
+                                                     const std::vector< size_t >& sourceDimensions,
+                                                     size_t startRow,
+                                                     size_t startCol,
+                                                     size_t countRows,
+                                                     size_t countCols,
+                                                     const std::string& numberType,
+                                                     int precision,
+                                                     int indentLevel )
+{
+    std::string ind = indent( indentLevel );
+    std::string filename = getFilename( h5FilePath );
+    
+    // Output dimensions
+    os << ind << "<DataItem ItemType=\"HyperSlab\" Dimensions=\"" << countRows;
+    if ( countCols > 1 )
+    {
+        os << " " << countCols;
+    }
+    os << "\" Type=\"HyperSlab\">\n";
+    
+    // HyperSlab selection: start, stride, count
+    os << ind << "  <DataItem Dimensions=\"3 2\" Format=\"XML\">\n";
+    os << ind << "    " << startRow << " " << startCol << "\n";  // start
+    os << ind << "    1 1\n";                                     // stride
+    os << ind << "    " << countRows << " " << countCols << "\n"; // count
+    os << ind << "  </DataItem>\n";
+    
+    // Source dataset
+    os << ind << "  <DataItem Dimensions=\"";
+    for ( size_t i = 0; i < sourceDimensions.size( ); ++i )
+    {
+        if ( i > 0 ) os << " ";
+        os << sourceDimensions[ i ];
+    }
+    os << "\" NumberType=\"" << numberType << "\" Precision=\"" << precision 
+       << "\" Format=\"HDF\">\n";
+    os << ind << "    " << filename << ":" << datasetPath << "\n";
+    os << ind << "  </DataItem>\n";
+    
+    os << ind << "</DataItem>\n";
+}
+
+void XDMFGeneratorBase::writeJoinedColumnsDataItem( std::ostream& os,
+                                                     const std::string& h5FilePath,
+                                                     const std::string& datasetPath,
+                                                     const std::vector< size_t >& sourceDimensions,
+                                                     size_t numRows,
+                                                     const std::vector< int >& columnIndices,
+                                                     const std::string& numberType,
+                                                     int precision,
+                                                     int indentLevel )
+{
+    std::string ind = indent( indentLevel );
+    std::string filename = getFilename( h5FilePath );
+    size_t numCols = columnIndices.size( );
+    
+    // Use Function to JOIN columns: JOIN($0, $1, $2)
+    os << ind << "<DataItem ItemType=\"Function\" Function=\"JOIN(";
+    for ( size_t i = 0; i < numCols; ++i )
+    {
+        if ( i > 0 ) os << ", ";
+        os << "$" << i;
+    }
+    os << ")\" Dimensions=\"" << numRows << " " << numCols << "\">\n";
+    
+    // Each column as a HyperSlab
+    for ( size_t i = 0; i < numCols; ++i )
+    {
+        int col = columnIndices[ i ];
+        
+        os << ind << "  <DataItem ItemType=\"HyperSlab\" Dimensions=\"" << numRows << "\" Type=\"HyperSlab\">\n";
+        os << ind << "    <DataItem Dimensions=\"3 2\" Format=\"XML\">\n";
+        os << ind << "      0 " << col << "\n";   // start
+        os << ind << "      1 1\n";                // stride
+        os << ind << "      " << numRows << " 1\n"; // count
+        os << ind << "    </DataItem>\n";
+        os << ind << "    <DataItem Dimensions=\"";
+        for ( size_t j = 0; j < sourceDimensions.size( ); ++j )
+        {
+            if ( j > 0 ) os << " ";
+            os << sourceDimensions[ j ];
+        }
+        os << "\" NumberType=\"" << numberType << "\" Precision=\"" << precision 
+           << "\" Format=\"HDF\">\n";
+        os << ind << "      " << filename << ":" << datasetPath << "\n";
+        os << ind << "    </DataItem>\n";
+        os << ind << "  </DataItem>\n";
+    }
+    
+    os << ind << "</DataItem>\n";
+}
+
+// ================================================================================================
+// TrajectoryXDMFGenerator implementation
+// ================================================================================================
+
+void TrajectoryXDMFGenerator::writeConnectivityToHDF5( )
+{
+    for ( auto& config : trajectoryConfigs_ )
+    {
+        if ( config.generateStaticPolyline && config.numTimeSteps > 0 )
+        {
+            // Create connectivity array [0, 1, 2, ..., N-1]
+            std::vector< int > connectivity( config.numTimeSteps );
+            for ( size_t i = 0; i < config.numTimeSteps; ++i )
+            {
+                connectivity[ i ] = static_cast< int >( i );
+            }
+            
+            // Open HDF5 file and write connectivity
+            HighFive::File h5File( config.h5FilePath, HighFive::File::ReadWrite );
+            
+            // Determine connectivity dataset path
+            if ( config.connectivityDataset.empty( ) )
+            {
+                // Derive from states dataset path
+                size_t lastSlash = config.statesDataset.find_last_of( '/' );
+                std::string basePath = ( lastSlash != std::string::npos ) 
+                    ? config.statesDataset.substr( 0, lastSlash + 1 )
+                    : "/";
+                config.connectivityDataset = basePath + "connectivity";
+            }
+            
+            // Check if dataset already exists
+            if ( !h5File.exist( config.connectivityDataset ) )
+            {
+                h5File.createDataSet< int >( 
+                    config.connectivityDataset, 
+                    HighFive::DataSpace( { config.numTimeSteps } ) 
+                ).write( connectivity );
+            }
+        }
+    }
+}
+
+void TrajectoryXDMFGenerator::generateGrids( std::ostream& os )
+{
+    for ( const auto& config : trajectoryConfigs_ )
+    {
+        if ( config.generateStaticPolyline )
+        {
+            generateStaticTrajectory( os, config, 2 );
+        }
+        
+        if ( config.generateAnimatedParticle )
+        {
+            generateAnimatedParticle( os, config, 2 );
+        }
+    }
+}
+
+void TrajectoryXDMFGenerator::generateStaticTrajectory( std::ostream& os,
+                                                         const TrajectoryConfig& config,
+                                                         int indentLevel )
+{
+    std::string ind = indent( indentLevel );
+    std::string filename = getFilename( config.h5FilePath );
+    
+    os << "\n" << ind << "<!-- Static trajectory polyline for " << config.bodyName << " -->\n";
+    os << ind << "<Grid Name=\"" << config.bodyName << "_Trajectory\" GridType=\"Uniform\">\n";
+    
+    // Topology: Polyline with N nodes
+    os << ind << "  <Topology TopologyType=\"Polyline\" NumberOfElements=\"1\" NodesPerElement=\"" 
+       << config.numTimeSteps << "\">\n";
+    writeHDF5DataItem( os, config.h5FilePath, config.connectivityDataset,
+                       { config.numTimeSteps }, "Int", 4, indentLevel + 2 );
+    os << ind << "  </Topology>\n";
+    
+    // Geometry: XYZ positions
+    os << ind << "  <Geometry GeometryType=\"XYZ\">\n";
+    writePositionGeometry( os, config, indentLevel + 2 );
+    os << ind << "  </Geometry>\n";
+    
+    // Time attribute
+    if ( config.includeTimeAttribute )
+    {
+        writeTimeAttribute( os, config, indentLevel + 1 );
+    }
+    
+    // Velocity vector attribute
+    if ( config.includeVelocityVector )
+    {
+        writeVelocityAttribute( os, config, indentLevel + 1 );
+    }
+    
+    // Dependent variable attributes
+    writeDependentVariableAttributes( os, config, indentLevel + 1 );
+    
+    os << ind << "</Grid>\n";
+}
+
+void TrajectoryXDMFGenerator::generateAnimatedParticle( std::ostream& os,
+                                                         const TrajectoryConfig& config,
+                                                         int indentLevel )
+{
+    std::string ind = indent( indentLevel );
+    std::string filename = getFilename( config.h5FilePath );
+    
+    os << "\n" << ind << "<!-- Animated particle for " << config.bodyName << " -->\n";
+    os << ind << "<Grid Name=\"" << config.bodyName << "_Particle\" GridType=\"Collection\" CollectionType=\"Temporal\">\n";
+    
+    // We need to read the times from the HDF5 file
+    std::vector< double > times;
+    {
+        HighFive::File h5File( config.h5FilePath, HighFive::File::ReadOnly );
+        auto timesDataset = h5File.getDataSet( config.timesDataset );
+        timesDataset.read( times );
+    }
+    
+    for ( size_t i = 0; i < config.numTimeSteps; ++i )
+    {
+        os << ind << "  <Grid Name=\"" << config.bodyName << "_t" << i << "\" GridType=\"Uniform\">\n";
+        os << ind << "    <Time Value=\"" << times[ i ] << "\"/>\n";
+        
+        // Single point topology
+        os << ind << "    <Topology TopologyType=\"Polyvertex\" NumberOfElements=\"1\"/>\n";
+        
+        // Geometry: single point position using HyperSlab
+        os << ind << "    <Geometry GeometryType=\"XYZ\">\n";
+        writeTimestepPositionGeometry( os, config, i, indentLevel + 3 );
+        os << ind << "    </Geometry>\n";
+        
+        // Velocity vector for this timestep
+        if ( config.includeVelocityVector )
+        {
+            writeTimestepVelocityAttribute( os, config, i, indentLevel + 2 );
+        }
+        
+        os << ind << "  </Grid>\n";
+    }
+    
+    os << ind << "</Grid>\n";
+}
+
+void TrajectoryXDMFGenerator::writePositionGeometry( std::ostream& os,
+                                                      const TrajectoryConfig& config,
+                                                      int indentLevel )
+{
+    writeJoinedColumnsDataItem( os, 
+                                config.h5FilePath,
+                                config.statesDataset,
+                                { config.numTimeSteps, config.stateSize },
+                                config.numTimeSteps,
+                                config.positionIndices,
+                                "Float", 8, indentLevel );
+}
+
+void TrajectoryXDMFGenerator::writeVelocityAttribute( std::ostream& os,
+                                                       const TrajectoryConfig& config,
+                                                       int indentLevel )
+{
+    std::string ind = indent( indentLevel );
+    
+    os << ind << "<Attribute Name=\"Velocity\" AttributeType=\"Vector\" Center=\"Node\">\n";
+    writeJoinedColumnsDataItem( os,
+                                config.h5FilePath,
+                                config.statesDataset,
+                                { config.numTimeSteps, config.stateSize },
+                                config.numTimeSteps,
+                                config.velocityIndices,
+                                "Float", 8, indentLevel + 1 );
+    os << ind << "</Attribute>\n";
+}
+
+void TrajectoryXDMFGenerator::writeTimeAttribute( std::ostream& os,
+                                                   const TrajectoryConfig& config,
+                                                   int indentLevel )
+{
+    std::string ind = indent( indentLevel );
+    
+    os << ind << "<Attribute Name=\"Time\" AttributeType=\"Scalar\" Center=\"Node\">\n";
+    writeHDF5DataItem( os, config.h5FilePath, config.timesDataset,
+                       { config.numTimeSteps }, "Float", 8, indentLevel + 1 );
+    os << ind << "</Attribute>\n";
+}
+
+void TrajectoryXDMFGenerator::writeDependentVariableAttributes( std::ostream& os,
+                                                                 const TrajectoryConfig& config,
+                                                                 int indentLevel )
+{
+    std::string ind = indent( indentLevel );
+    
+    for ( const auto& attr : config.dependentVariableAttributes )
+    {
+        os << ind << "<Attribute Name=\"" << attr.name << "\" AttributeType=\"" 
+           << attr.getTypeString( ) << "\" Center=\"Node\">\n";
+        
+        if ( attr.columnIndices.size( ) == 1 )
+        {
+            // Single column - use HyperSlab
+            writeHDF5HyperSlabDataItem( os,
+                                        attr.h5FilePath,
+                                        attr.datasetPath,
+                                        { attr.numElements, config.dependentVariablesSize },
+                                        0, attr.columnIndices[ 0 ],
+                                        attr.numElements, 1,
+                                        "Float", 8, indentLevel + 1 );
+        }
+        else
+        {
+            // Multiple columns - use JOIN
+            writeJoinedColumnsDataItem( os,
+                                        attr.h5FilePath,
+                                        attr.datasetPath,
+                                        { attr.numElements, config.dependentVariablesSize },
+                                        attr.numElements,
+                                        attr.columnIndices,
+                                        "Float", 8, indentLevel + 1 );
+        }
+        
+        os << ind << "</Attribute>\n";
+    }
+}
+
+void TrajectoryXDMFGenerator::writeTimestepPositionGeometry( std::ostream& os,
+                                                              const TrajectoryConfig& config,
+                                                              size_t timeIndex,
+                                                              int indentLevel )
+{
+    std::string ind = indent( indentLevel );
+    std::string filename = getFilename( config.h5FilePath );
+    
+    // Extract single row, then join the position columns
+    // For a single point, we use a simpler approach: extract x, y, z separately and JOIN
+    os << ind << "<DataItem ItemType=\"Function\" Function=\"JOIN($0, $1, $2)\" Dimensions=\"1 3\">\n";
+    
+    for ( int col : config.positionIndices )
+    {
+        os << ind << "  <DataItem ItemType=\"HyperSlab\" Dimensions=\"1\" Type=\"HyperSlab\">\n";
+        os << ind << "    <DataItem Dimensions=\"3 2\" Format=\"XML\">\n";
+        os << ind << "      " << timeIndex << " " << col << "\n";
+        os << ind << "      1 1\n";
+        os << ind << "      1 1\n";
+        os << ind << "    </DataItem>\n";
+        os << ind << "    <DataItem Dimensions=\"" << config.numTimeSteps << " " << config.stateSize 
+           << "\" NumberType=\"Float\" Precision=\"8\" Format=\"HDF\">\n";
+        os << ind << "      " << filename << ":" << config.statesDataset << "\n";
+        os << ind << "    </DataItem>\n";
+        os << ind << "  </DataItem>\n";
+    }
+    
+    os << ind << "</DataItem>\n";
+}
+
+void TrajectoryXDMFGenerator::writeTimestepVelocityAttribute( std::ostream& os,
+                                                               const TrajectoryConfig& config,
+                                                               size_t timeIndex,
+                                                               int indentLevel )
+{
+    std::string ind = indent( indentLevel );
+    std::string filename = getFilename( config.h5FilePath );
+    
+    os << ind << "<Attribute Name=\"Velocity\" AttributeType=\"Vector\" Center=\"Node\">\n";
+    os << ind << "  <DataItem ItemType=\"Function\" Function=\"JOIN($0, $1, $2)\" Dimensions=\"1 3\">\n";
+    
+    for ( int col : config.velocityIndices )
+    {
+        os << ind << "    <DataItem ItemType=\"HyperSlab\" Dimensions=\"1\" Type=\"HyperSlab\">\n";
+        os << ind << "      <DataItem Dimensions=\"3 2\" Format=\"XML\">\n";
+        os << ind << "        " << timeIndex << " " << col << "\n";
+        os << ind << "        1 1\n";
+        os << ind << "        1 1\n";
+        os << ind << "      </DataItem>\n";
+        os << ind << "      <DataItem Dimensions=\"" << config.numTimeSteps << " " << config.stateSize 
+           << "\" NumberType=\"Float\" Precision=\"8\" Format=\"HDF\">\n";
+        os << ind << "        " << filename << ":" << config.statesDataset << "\n";
+        os << ind << "      </DataItem>\n";
+        os << ind << "    </DataItem>\n";
+    }
+    
+    os << ind << "  </DataItem>\n";
+    os << ind << "</Attribute>\n";
+}
+
+// ================================================================================================
+// PointCloudXDMFGenerator implementation
+// ================================================================================================
+
+void PointCloudXDMFGenerator::generateGrids( std::ostream& os )
+{
+    for ( const auto& config : pointCloudConfigs_ )
+    {
+        std::string ind = indent( 2 );
+        
+        os << "\n" << ind << "<!-- Point cloud: " << config.name << " -->\n";
+        os << ind << "<Grid Name=\"" << config.name << "\" GridType=\"Uniform\">\n";
+        
+        // Topology: Polyvertex (collection of points)
+        os << ind << "  <Topology TopologyType=\"Polyvertex\" NumberOfElements=\"" 
+           << config.numPoints << "\"/>\n";
+        
+        // Geometry
+        os << ind << "  <Geometry GeometryType=\"XYZ\">\n";
+        writeHDF5DataItem( os, config.h5FilePath, config.positionsDataset,
+                           { config.numPoints, 3 }, "Float", 8, 4 );
+        os << ind << "  </Geometry>\n";
+        
+        // Attributes
+        for ( const auto& attr : config.attributes )
+        {
+            os << ind << "  <Attribute Name=\"" << attr.name << "\" AttributeType=\"" 
+               << attr.getTypeString( ) << "\" Center=\"Node\">\n";
+            
+            if ( attr.columnIndices.empty( ) || attr.columnIndices.size( ) == 1 )
+            {
+                // Simple dataset reference
+                size_t dim = ( attr.type == XDMFAttributeType::Scalar ) ? 1 : 3;
+                if ( attr.type == XDMFAttributeType::Scalar )
+                {
+                    writeHDF5DataItem( os, attr.h5FilePath, attr.datasetPath,
+                                       { attr.numElements }, "Float", 8, 4 );
+                }
+                else
+                {
+                    writeHDF5DataItem( os, attr.h5FilePath, attr.datasetPath,
+                                       { attr.numElements, 3 }, "Float", 8, 4 );
+                }
+            }
+            
+            os << ind << "  </Attribute>\n";
+        }
+        
+        os << ind << "</Grid>\n";
+    }
+}
+
+// ================================================================================================
+// CompositeXDMFGenerator implementation
+// ================================================================================================
+
+void CompositeXDMFGenerator::generateGrids( std::ostream& os )
+{
+    // Generate trajectory grids
+    trajectoryGenerator_.generateGrids( os );
+    
+    // Generate point cloud grids
+    pointCloudGenerator_.generateGrids( os );
+}
+
+} // namespace io
+} // namespace tudat

@@ -8,6 +8,10 @@
 #    http://tudat.tudelft.nl/LICENSE.
 #
 
+# Find HighFive for HDF5 support
+find_package(HighFive CONFIG REQUIRED)
+find_package(HDF5 REQUIRED COMPONENTS CXX)
+
 # Add source files.
 set(io_SOURCES
         "basicInputOutput.cpp"
@@ -39,7 +43,7 @@ set(io_SOURCES
         "readViennaMappingFunctionData.cpp"
         "readIonexFile.cpp"
         "unifiedDataLibraryReader.cpp"
-
+        "hdf5Manager.cpp"
 )
 
 # Add header files.
@@ -82,13 +86,14 @@ set(io_HEADERS
         "readTrackingTxtFile.h"
         "readVariousPdsFiles.h"
         "unifiedDataLibraryReader.h"
+        "hdf5Manager.h"
         )
 
 # Add library.
 TUDAT_ADD_LIBRARY("input_output"
         "${io_SOURCES}"
         "${io_HEADERS}"
-#        PRIVATE_LINKS "${Boost_LIBRARIES}"
+        PRIVATE_LINKS HighFive HDF5::HDF5
 #        PRIVATE_INCLUDES "${EIGEN3_INCLUDE_DIRS}" "${Boost_INCLUDE_DIRS}"
         )
 

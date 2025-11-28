@@ -457,6 +457,309 @@ void CompositeXDMFGenerator::generateGrids( std::ostream& os )
     
     // Generate point cloud grids
     pointCloudGenerator_.generateGrids( os );
+    
+    // Generate observation grids
+    observationGenerator_.generateGrids( os );
+}
+
+// ================================================================================================
+// ObservationXDMFGenerator implementation
+// ================================================================================================
+
+void ObservationXDMFGenerator::generateGrids( std::ostream& os )
+{
+    // Generate per-observation-set grids
+    for ( const auto& config : observationConfigs_ )
+    {
+        if ( config.numObservations > 0 )
+        {
+            generateObservationSetGrid( os, config, 2 );
+        }
+    }
+}
+
+void ObservationXDMFGenerator::generateObservationSetGrid( std::ostream& os,
+                                                            const ObservationXDMFConfig& config,
+                                                            int indentLevel )
+{
+    std::string ind = indent( indentLevel );
+    
+    os << "\n" << ind << "<!-- Observation set: " << config.setName 
+       << " (" << config.observableTypeName << ") -->\n";
+    os << ind << "<Grid Name=\"" << config.setName << "_" << config.observableTypeName 
+       << "\" GridType=\"Uniform\">\n";
+    
+    // Topology: Polyvertex (collection of points)
+    os << ind << "  <Topology TopologyType=\"Polyvertex\" NumberOfElements=\"" 
+       << config.numObservations << "\"/>\n";
+    
+    // Geometry: XYZ with time as X, observation value as Y, and 0 as Z
+    // This allows visualization as a scatter plot in ParaView
+    os << ind << "  <Geometry GeometryType=\"XYZ\">\n";
+    writeTimeGeometry( os, config, indentLevel + 2 );
+    os << ind << "  </Geometry>\n";
+    
+    // Observation value attribute (for coloring/sizing glyphs)
+    writeObservationAttribute( os, config, indentLevel + 1 );
+    
+    // Weights attribute
+    if ( config.hasWeights )
+    {
+        writeWeightsAttribute( os, config, indentLevel + 1 );
+    }
+    
+    // Residuals attribute
+    if ( config.hasResiduals )
+    {
+        writeResidualsAttribute( os, config, indentLevel + 1 );
+    }
+    
+    // Dependent variable attributes
+    if ( config.hasDependentVariables )
+    {
+        writeDependentVariableAttributes( os, config, indentLevel + 1 );
+    }
+    
+    os << ind << "</Grid>\n";
+}
+
+void ObservationXDMFGenerator::writeTimeGeometry( std::ostream& os,
+                                                   const ObservationXDMFConfig& config,
+                                                   int indentLevel )
+{
+    std::string ind = indent( indentLevel );
+    std::string filename = getFilename( config.h5FilePath );
+    std::string fullTimesPath = config.h5GroupPath + "/" + config.timesDataset;
+    std::string fullObsPath = config.h5GroupPath + "/" + config.observationsDataset;
+    
+    // Create XYZ geometry using a Function that combines:
+    // X = time, Y = observation value (first component), Z = 0
+    // This creates a time-series scatter plot visualization
+    
+    os << ind << "<DataItem ItemType=\"Function\" Function=\"JOIN($0, $1, $2)\" "
+       << "Dimensions=\"" << config.numObservations << " 3\">\n";
+    
+    // $0: Time values (X coordinate)
+    os << ind << "  <DataItem Dimensions=\"" << config.numObservations 
+       << "\" NumberType=\"Float\" Precision=\"8\" Format=\"HDF\">\n";
+    os << ind << "    " << filename << ":" << fullTimesPath << "\n";
+    os << ind << "  </DataItem>\n";
+    
+    // $1: First observation component (Y coordinate) - use HyperSlab for first column
+    os << ind << "  <DataItem ItemType=\"HyperSlab\" Dimensions=\"" << config.numObservations 
+       << "\" Type=\"HyperSlab\">\n";
+    os << ind << "    <DataItem Dimensions=\"3 2\" Format=\"XML\">\n";
+    os << ind << "      0 0\n";  // start: row 0, col 0
+    os << ind << "      1 1\n";  // stride
+    os << ind << "      " << config.numObservations << " 1\n";  // count
+    os << ind << "    </DataItem>\n";
+    os << ind << "    <DataItem Dimensions=\"" << config.numObservations << " " 
+       << config.observableSize << "\" NumberType=\"Float\" Precision=\"8\" Format=\"HDF\">\n";
+    os << ind << "      " << filename << ":" << fullObsPath << "\n";
+    os << ind << "    </DataItem>\n";
+    os << ind << "  </DataItem>\n";
+    
+    // $2: Zero values (Z coordinate) - create inline constant array
+    os << ind << "  <DataItem ItemType=\"Function\" Function=\"0 * $0\" Dimensions=\"" 
+       << config.numObservations << "\">\n";
+    os << ind << "    <DataItem Dimensions=\"" << config.numObservations 
+       << "\" NumberType=\"Float\" Precision=\"8\" Format=\"HDF\">\n";
+    os << ind << "      " << filename << ":" << fullTimesPath << "\n";
+    os << ind << "    </DataItem>\n";
+    os << ind << "  </DataItem>\n";
+    
+    os << ind << "</DataItem>\n";
+}
+
+void ObservationXDMFGenerator::writeObservationAttribute( std::ostream& os,
+                                                           const ObservationXDMFConfig& config,
+                                                           int indentLevel )
+{
+    std::string ind = indent( indentLevel );
+    std::string fullObsPath = config.h5GroupPath + "/" + config.observationsDataset;
+    
+    // Determine attribute type based on observable size
+    std::string attrType;
+    if ( config.observableSize == 1 )
+    {
+        attrType = "Scalar";
+    }
+    else if ( config.observableSize == 2 || config.observableSize == 3 )
+    {
+        attrType = "Vector";
+    }
+    else
+    {
+        // For larger sizes, treat as a tensor or just use first component as scalar
+        attrType = "Scalar";
+    }
+    
+    os << ind << "<Attribute Name=\"Observation\" AttributeType=\"" << attrType 
+       << "\" Center=\"Node\">\n";
+    
+    if ( config.observableSize == 1 )
+    {
+        // Single column - use HyperSlab to extract column 0
+        writeHDF5HyperSlabDataItem( os,
+                                    config.h5FilePath,
+                                    fullObsPath,
+                                    { config.numObservations, config.observableSize },
+                                    0, 0,
+                                    config.numObservations, 1,
+                                    "Float", 8, indentLevel + 1 );
+    }
+    else if ( config.observableSize == 2 || config.observableSize == 3 )
+    {
+        // Vector - use full dataset
+        writeHDF5DataItem( os,
+                          config.h5FilePath,
+                          fullObsPath,
+                          { config.numObservations, config.observableSize },
+                          "Float", 8, indentLevel + 1 );
+    }
+    else
+    {
+        // Use first column only for unsupported sizes
+        writeHDF5HyperSlabDataItem( os,
+                                    config.h5FilePath,
+                                    fullObsPath,
+                                    { config.numObservations, config.observableSize },
+                                    0, 0,
+                                    config.numObservations, 1,
+                                    "Float", 8, indentLevel + 1 );
+    }
+    
+    os << ind << "</Attribute>\n";
+}
+
+void ObservationXDMFGenerator::writeWeightsAttribute( std::ostream& os,
+                                                       const ObservationXDMFConfig& config,
+                                                       int indentLevel )
+{
+    std::string ind = indent( indentLevel );
+    std::string fullWeightsPath = config.h5GroupPath + "/" + config.weightsDataset;
+    
+    // Similar logic to observations
+    std::string attrType = ( config.observableSize == 1 ) ? "Scalar" : 
+                           ( ( config.observableSize == 2 || config.observableSize == 3 ) ? "Vector" : "Scalar" );
+    
+    os << ind << "<Attribute Name=\"Weight\" AttributeType=\"" << attrType 
+       << "\" Center=\"Node\">\n";
+    
+    if ( config.observableSize == 1 )
+    {
+        writeHDF5HyperSlabDataItem( os,
+                                    config.h5FilePath,
+                                    fullWeightsPath,
+                                    { config.numObservations, config.observableSize },
+                                    0, 0,
+                                    config.numObservations, 1,
+                                    "Float", 8, indentLevel + 1 );
+    }
+    else if ( config.observableSize == 2 || config.observableSize == 3 )
+    {
+        writeHDF5DataItem( os,
+                          config.h5FilePath,
+                          fullWeightsPath,
+                          { config.numObservations, config.observableSize },
+                          "Float", 8, indentLevel + 1 );
+    }
+    else
+    {
+        writeHDF5HyperSlabDataItem( os,
+                                    config.h5FilePath,
+                                    fullWeightsPath,
+                                    { config.numObservations, config.observableSize },
+                                    0, 0,
+                                    config.numObservations, 1,
+                                    "Float", 8, indentLevel + 1 );
+    }
+    
+    os << ind << "</Attribute>\n";
+}
+
+void ObservationXDMFGenerator::writeResidualsAttribute( std::ostream& os,
+                                                         const ObservationXDMFConfig& config,
+                                                         int indentLevel )
+{
+    std::string ind = indent( indentLevel );
+    std::string fullResidualsPath = config.h5GroupPath + "/" + config.residualsDataset;
+    
+    std::string attrType = ( config.observableSize == 1 ) ? "Scalar" : 
+                           ( ( config.observableSize == 2 || config.observableSize == 3 ) ? "Vector" : "Scalar" );
+    
+    os << ind << "<Attribute Name=\"Residual\" AttributeType=\"" << attrType 
+       << "\" Center=\"Node\">\n";
+    
+    if ( config.observableSize == 1 )
+    {
+        writeHDF5HyperSlabDataItem( os,
+                                    config.h5FilePath,
+                                    fullResidualsPath,
+                                    { config.numObservations, config.observableSize },
+                                    0, 0,
+                                    config.numObservations, 1,
+                                    "Float", 8, indentLevel + 1 );
+    }
+    else if ( config.observableSize == 2 || config.observableSize == 3 )
+    {
+        writeHDF5DataItem( os,
+                          config.h5FilePath,
+                          fullResidualsPath,
+                          { config.numObservations, config.observableSize },
+                          "Float", 8, indentLevel + 1 );
+    }
+    else
+    {
+        writeHDF5HyperSlabDataItem( os,
+                                    config.h5FilePath,
+                                    fullResidualsPath,
+                                    { config.numObservations, config.observableSize },
+                                    0, 0,
+                                    config.numObservations, 1,
+                                    "Float", 8, indentLevel + 1 );
+    }
+    
+    os << ind << "</Attribute>\n";
+}
+
+void ObservationXDMFGenerator::writeDependentVariableAttributes( std::ostream& os,
+                                                                  const ObservationXDMFConfig& config,
+                                                                  int indentLevel )
+{
+    std::string ind = indent( indentLevel );
+    std::string fullDepVarPath = config.h5GroupPath + "/" + config.dependentVariablesDataset;
+    
+    for ( const auto& attr : config.dependentVariableAttributes )
+    {
+        os << ind << "<Attribute Name=\"" << attr.name << "\" AttributeType=\"" 
+           << attr.getTypeString( ) << "\" Center=\"Node\">\n";
+        
+        if ( attr.columnIndices.size( ) == 1 )
+        {
+            // Single column - use HyperSlab
+            writeHDF5HyperSlabDataItem( os,
+                                        config.h5FilePath,
+                                        fullDepVarPath,
+                                        { config.numObservations, config.dependentVariablesSize },
+                                        0, attr.columnIndices[ 0 ],
+                                        config.numObservations, 1,
+                                        "Float", 8, indentLevel + 1 );
+        }
+        else
+        {
+            // Multiple columns - use JOIN
+            writeJoinedColumnsDataItem( os,
+                                        config.h5FilePath,
+                                        fullDepVarPath,
+                                        { config.numObservations, config.dependentVariablesSize },
+                                        config.numObservations,
+                                        attr.columnIndices,
+                                        "Float", 8, indentLevel + 1 );
+        }
+        
+        os << ind << "</Attribute>\n";
+    }
 }
 
 } // namespace io

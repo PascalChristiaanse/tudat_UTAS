@@ -115,6 +115,31 @@ void HDF5OutputFile::writeIdMapping(
             .write( names );
 }
 
+void HDF5OutputFile::writeLinkEnds(
+    HighFive::Group& parentGroup,
+    const observation_models::LinkEnds& linkEnds )
+{
+    // Create link_ends subgroup
+    HighFive::Group linkEndsGroup = parentGroup.createGroup( "link_ends" );
+    
+    // Serialize link ends
+    std::vector< int > linkEndTypes;
+    std::vector< std::string > bodyNames;
+    std::vector< std::string > stationNames;
+    serializeLinkEnds( linkEnds, linkEndTypes, bodyNames, stationNames );
+    
+    // Write arrays
+    if ( !linkEndTypes.empty( ) )
+    {
+        linkEndsGroup.createDataSet< int >( "link_end_types", 
+                                            HighFive::DataSpace( { linkEndTypes.size( ) } ) )
+                     .write( linkEndTypes );
+        
+        linkEndsGroup.createDataSet( "body_names", bodyNames );
+        linkEndsGroup.createDataSet( "station_names", stationNames );
+    }
+}
+
 void HDF5OutputFile::generateXDMF( const std::string& xdmfFilePath )
 {
     if ( trajectoryConfigs_.empty( ) )
@@ -148,6 +173,38 @@ void HDF5OutputFile::generateXDMF( )
     }
     
     generateXDMF( xdmfPath );
+}
+
+void HDF5OutputFile::generateObservationXDMF( const std::string& xdmfFilePath )
+{
+    if ( observationConfigs_.empty( ) )
+    {
+        std::cerr << "Warning: No observation sets to export to XDMF" << std::endl;
+        return;
+    }
+    
+    // Create observation XDMF generator
+    ObservationXDMFGenerator xdmfGenerator( observationConfigs_ );
+    
+    // Write the XDMF file
+    xdmfGenerator.write( xdmfFilePath );
+}
+
+void HDF5OutputFile::generateObservationXDMF( )
+{
+    // Generate default XDMF path (same as HDF5 but with _observations.xdmf extension)
+    std::string xdmfPath = filePath_;
+    size_t dotPos = xdmfPath.find_last_of( '.' );
+    if ( dotPos != std::string::npos )
+    {
+        xdmfPath = xdmfPath.substr( 0, dotPos ) + "_observations.xdmf";
+    }
+    else
+    {
+        xdmfPath += "_observations.xdmf";
+    }
+    
+    generateObservationXDMF( xdmfPath );
 }
 
 }  // namespace io

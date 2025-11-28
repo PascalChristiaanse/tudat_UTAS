@@ -129,6 +129,37 @@ struct PointCloudConfig {
 };
 
 // ================================================================================================
+// Observation set configuration
+// ================================================================================================
+
+//! Configuration for an observation set in XDMF output
+struct ObservationXDMFConfig {
+    std::string setName;             //!< Name of the observation set (used in grid naming)
+    std::string observableTypeName;  //!< Name of the observable type
+    std::string h5FilePath;          //!< Path to HDF5 file
+    std::string h5GroupPath;         //!< Path to the observation set group in HDF5
+    
+    size_t numObservations = 0;      //!< Number of observations
+    size_t observableSize = 1;       //!< Size of each observation (1 for scalar, 2-3 for vector)
+    
+    // Dataset paths (relative to h5GroupPath)
+    std::string timesDataset = "times";           //!< Path to times dataset
+    std::string observationsDataset = "observations";  //!< Path to observations dataset
+    std::string weightsDataset = "weights";       //!< Path to weights dataset
+    std::string residualsDataset = "residuals";   //!< Path to residuals dataset
+    
+    // Optional data flags
+    bool hasWeights = true;          //!< Whether weights are available
+    bool hasResiduals = true;        //!< Whether residuals are available
+    bool hasDependentVariables = false;  //!< Whether dependent variables are available
+    
+    // Dependent variable configuration
+    std::string dependentVariablesDataset;  //!< Path to dependent variables dataset
+    size_t dependentVariablesSize = 0;      //!< Size of dependent variables vector
+    std::vector< XDMFAttributeConfig > dependentVariableAttributes;  //!< Attributes for each dep var
+};
+
+// ================================================================================================
 // Base XDMF Generator class
 // ================================================================================================
 
@@ -295,10 +326,84 @@ private:
 };
 
 // ================================================================================================
+// Observation XDMF Generator
+// ================================================================================================
+
+//! XDMF generator for observation data
+/**
+ * Generates XDMF grids for observation sets where:
+ * - Geometry is 1D with time as the X coordinate
+ * - Each observation is a point (Polyvertex topology)
+ * - Observation values are scalar or vector attributes
+ * - Weights and residuals are additional attributes
+ */
+class ObservationXDMFGenerator : public XDMFGeneratorBase
+{
+    friend class CompositeXDMFGenerator;
+
+public:
+    //! Default constructor
+    ObservationXDMFGenerator( ) = default;
+
+    //! Constructor with single observation set
+    explicit ObservationXDMFGenerator( const ObservationXDMFConfig& config )
+    {
+        addObservationSet( config );
+    }
+
+    //! Constructor with multiple observation sets
+    explicit ObservationXDMFGenerator( const std::vector< ObservationXDMFConfig >& configs )
+        : observationConfigs_( configs ) {}
+
+    //! Add an observation set configuration
+    void addObservationSet( const ObservationXDMFConfig& config )
+    {
+        observationConfigs_.push_back( config );
+    }
+
+    //! Clear all observation configurations
+    void clear( )
+    {
+        observationConfigs_.clear( );
+    }
+
+    //! Get number of observation sets
+    size_t getNumObservationSets( ) const
+    {
+        return observationConfigs_.size( );
+    }
+
+protected:
+    //! Generate all grids
+    void generateGrids( std::ostream& os ) override;
+
+private:
+    //! Generate a single observation set grid
+    void generateObservationSetGrid( std::ostream& os, const ObservationXDMFConfig& config, int indentLevel );
+
+    //! Write time geometry (1D with time as X coordinate)
+    void writeTimeGeometry( std::ostream& os, const ObservationXDMFConfig& config, int indentLevel );
+
+    //! Write observation value attribute (scalar or vector)
+    void writeObservationAttribute( std::ostream& os, const ObservationXDMFConfig& config, int indentLevel );
+
+    //! Write weights attribute
+    void writeWeightsAttribute( std::ostream& os, const ObservationXDMFConfig& config, int indentLevel );
+
+    //! Write residuals attribute
+    void writeResidualsAttribute( std::ostream& os, const ObservationXDMFConfig& config, int indentLevel );
+
+    //! Write dependent variable attributes
+    void writeDependentVariableAttributes( std::ostream& os, const ObservationXDMFConfig& config, int indentLevel );
+
+    std::vector< ObservationXDMFConfig > observationConfigs_;
+};
+
+// ================================================================================================
 // Composite XDMF Generator (combines multiple generators)
 // ================================================================================================
 
-//! XDMF generator that combines trajectories and point clouds
+//! XDMF generator that combines trajectories, point clouds, and observations
 class CompositeXDMFGenerator : public XDMFGeneratorBase
 {
 public:
@@ -317,6 +422,12 @@ public:
         return pointCloudGenerator_;
     }
 
+    //! Get observation generator for modification
+    ObservationXDMFGenerator& getObservationGenerator( )
+    {
+        return observationGenerator_;
+    }
+
     //! Write connectivity to HDF5 (delegates to trajectory generator)
     void writeConnectivityToHDF5( )
     {
@@ -330,6 +441,7 @@ protected:
 private:
     TrajectoryXDMFGenerator trajectoryGenerator_;
     PointCloudXDMFGenerator pointCloudGenerator_;
+    ObservationXDMFGenerator observationGenerator_;
 };
 
 }  // namespace io

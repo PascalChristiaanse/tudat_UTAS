@@ -33,6 +33,10 @@
 #include "tudat/basics/timeType.h"
 #include "tudat/simulation/propagation_setup/propagationResults.h"
 #include "tudat/simulation/propagation_setup/dependentVariablesInterface.h"
+#include "tudat/simulation/estimation_setup/singleObservationSet.h"
+#include "tudat/simulation/estimation_setup/observationCollection.h"
+#include "tudat/simulation/estimation_setup/observationOutputSettings.h"
+#include "tudat/astro/observation_models/observableTypes.h"
 #include "tudat/io/xdmfGenerator.h"
 
 namespace tudat
@@ -168,6 +172,91 @@ inline void convertIdMapToArrays(
 }
 
 // ================================================================================================
+// Observation data conversion utilities
+// ================================================================================================
+
+//! Convert a vector of observation vectors to a 2D array for HDF5 storage
+template< typename ObservationScalarType >
+void convertObservationsToArrays(
+    const std::vector< Eigen::Matrix< ObservationScalarType, Eigen::Dynamic, 1 > >& observations,
+    std::vector< std::vector< double > >& observationArrays )
+{
+    observationArrays.clear( );
+    observationArrays.reserve( observations.size( ) );
+    
+    for ( const auto& obs : observations )
+    {
+        std::vector< double > obsVec( obs.size( ) );
+        for ( int i = 0; i < obs.size( ); ++i )
+        {
+            obsVec[i] = static_cast< double >( obs( i ) );
+        }
+        observationArrays.push_back( obsVec );
+    }
+}
+
+//! Convert observation times to double array
+template< typename TimeType >
+void convertObservationTimesToDoubleArray(
+    const std::vector< TimeType >& times,
+    std::vector< double >& doubleTimes )
+{
+    doubleTimes.clear( );
+    doubleTimes.reserve( times.size( ) );
+    
+    for ( const auto& t : times )
+    {
+        doubleTimes.push_back( timeToDouble( t ) );
+    }
+}
+
+//! Convert LinkEnds to serializable string arrays
+inline void serializeLinkEnds(
+    const observation_models::LinkEnds& linkEnds,
+    std::vector< int >& linkEndTypes,
+    std::vector< std::string >& bodyNames,
+    std::vector< std::string >& stationNames )
+{
+    linkEndTypes.clear( );
+    bodyNames.clear( );
+    stationNames.clear( );
+    
+    for ( const auto& [linkEndType, linkEndId] : linkEnds )
+    {
+        linkEndTypes.push_back( static_cast< int >( linkEndType ) );
+        bodyNames.push_back( linkEndId.bodyName_ );
+        stationNames.push_back( linkEndId.stationName_ );
+    }
+}
+
+//! Get string name for an observable type
+inline std::string getObservableTypeName( const observation_models::ObservableType observableType )
+{
+    return observation_models::getObservableName( observableType );
+}
+
+//! Convert dependent variable bookkeeping to ID map format
+inline std::map< std::pair< int, int >, std::string > convertDependentVariableBookkeepingToIdMap(
+    const std::shared_ptr< simulation_setup::ObservationDependentVariableBookkeeping >& bookkeeping )
+{
+    std::map< std::pair< int, int >, std::string > idMap;
+    
+    if ( bookkeeping != nullptr )
+    {
+        auto settingsMap = bookkeeping->getSettingsIndicesAndSizes( );
+        for ( const auto& [indexPair, settings] : settingsMap )
+        {
+            // Create a descriptive name from the variable type and identifier
+            std::string name = simulation_setup::getObservationDependentVariableName( settings->variableType_ );
+            name += settings->getIdentifier( );
+            idMap[ indexPair ] = name;
+        }
+    }
+    
+    return idMap;
+}
+
+// ================================================================================================
 // HDF5OutputFile class
 // ================================================================================================
 
@@ -243,6 +332,78 @@ public:
         const std::string& groupPath = "/Trajectories/VariationalEquationsSimulationResults" );
     
     /**
+     * @brief Add a SingleObservationSet to the file
+     * @tparam ObservationScalarType Scalar type for observations (default: double)
+     * @tparam TimeType Time type (default: double, can be tudat::Time)
+     * @param observationSet The observation set to store
+     * @param setName Name for this observation set (used as group name)
+     * @param groupPath Base path in HDF5 file (default: "/Observations/SingleObservationSets")
+     * @param includeFilteredObservations If true, also store filtered observations in a subgroup
+     * 
+     * This creates a hierarchical structure:
+     * /Observations/SingleObservationSets/<setName>/
+     *     observations         - 2D array (numObs x observationSize)
+     *     times               - 1D array of observation times
+     *     weights             - 2D array (numObs x observationSize)
+     *     residuals           - 2D array (numObs x observationSize)
+     *     dependent_variables - 2D array (numObs x depVarSize) [if available]
+     *     link_ends/
+     *         link_end_types  - 1D array of LinkEndType values
+     *         body_names      - 1D array of body name strings
+     *         station_names   - 1D array of station name strings
+     *     dependent_variable_ids/
+     *         start_indices   - 1D array
+     *         sizes           - 1D array
+     *         names           - 1D array of strings
+     *     metadata (as attributes):
+     *         observable_type, observable_type_name, reference_link_end,
+     *         num_observations, single_observation_size, time_bounds
+     *     filtered_observations/ [if includeFilteredObservations and filtered data exists]
+     *         (same structure as above)
+     */
+    template< typename ObservationScalarType = double, typename TimeType = double >
+    void addSingleObservationSet(
+        const std::shared_ptr< observation_models::SingleObservationSet< ObservationScalarType, TimeType > >& observationSet,
+        const std::string& setName,
+        const std::string& groupPath = "/Observations/SingleObservationSets",
+        bool includeFilteredObservations = false );
+    
+    /**
+     * @brief Add an ObservationCollection to the file
+     * @tparam ObservationScalarType Scalar type for observations (default: double)
+     * @tparam TimeType Time type (default: double, can be tudat::Time)
+     * @param observationCollection The observation collection to store
+     * @param collectionName Name for this collection (used as group name)
+     * @param groupPath Base path in HDF5 file (default: "/Observations/ObservationCollections")
+     * @param includeFilteredObservations If true, also store filtered observations
+     * 
+     * This creates a hierarchical structure organized by observable type and link ends:
+     * /Observations/ObservationCollections/<collectionName>/
+     *     metadata/
+     *         observable_types      - 1D array of observable type integers
+     *         observable_type_names - 1D array of observable type names
+     *         total_observation_size - scalar
+     *         time_bounds          - 2-element array [start, end]
+     *     concatenated/
+     *         observations         - 1D array (all observations concatenated)
+     *         times               - 1D array (all times concatenated)
+     *         weights             - 1D array (all weights concatenated)
+     *         residuals           - 1D array (all residuals concatenated)
+     *         link_end_ids        - 1D array (link end ID for each observation)
+     *         observation_set_start_and_size - 2D array mapping observation sets
+     *     by_observable_type/
+     *         /<observable_type_name>/
+     *             /<link_ends_id>/
+     *                 /set_0/, /set_1/, ...  (same structure as SingleObservationSet)
+     */
+    template< typename ObservationScalarType = double, typename TimeType = double >
+    void addObservationCollection(
+        const std::shared_ptr< observation_models::ObservationCollection< ObservationScalarType, TimeType > >& observationCollection,
+        const std::string& collectionName = "default",
+        const std::string& groupPath = "/Observations/ObservationCollections",
+        bool includeFilteredObservations = false );
+    
+    /**
      * @brief Get the underlying HighFive file object for custom operations
      * @return Reference to the HighFive::File object
      */
@@ -271,12 +432,38 @@ public:
     void generateXDMF( );
     
     /**
+     * @brief Generate XDMF descriptor file for observation data visualization
+     * @param xdmfFilePath Path to the XDMF file to create
+     * 
+     * This creates an XDMF3 file for visualizing observation data in ParaView.
+     * Each observation set becomes a Polyvertex grid where:
+     * - Time is the X coordinate (1D geometry)
+     * - Observation values are scalar or vector attributes
+     * - Weights and residuals are additional attributes
+     */
+    void generateObservationXDMF( const std::string& xdmfFilePath );
+    
+    /**
+     * @brief Generate observation XDMF with default name (same as HDF5 but _observations.xdmf)
+     */
+    void generateObservationXDMF( );
+    
+    /**
      * @brief Get the trajectory configurations for all stored trajectories
      * @return Vector of TrajectoryConfig objects
      */
     std::vector< TrajectoryConfig > getTrajectoryConfigs( ) const
     {
         return trajectoryConfigs_;
+    }
+    
+    /**
+     * @brief Get the observation configurations for all stored observation sets
+     * @return Vector of ObservationXDMFConfig objects
+     */
+    std::vector< ObservationXDMFConfig > getObservationConfigs( ) const
+    {
+        return observationConfigs_;
     }
     
     /**
@@ -319,10 +506,34 @@ private:
         HighFive::Group& group,
         const std::shared_ptr< propagators::SingleArcSimulationResults< StateScalarType, TimeType > >& results );
     
+    /**
+     * @brief Write link ends information to a subgroup
+     * @param parentGroup Parent group to create subgroup in
+     * @param linkEnds The link ends to serialize
+     */
+    void writeLinkEnds(
+        HighFive::Group& parentGroup,
+        const observation_models::LinkEnds& linkEnds );
+    
+    /**
+     * @brief Write observation set data to a group
+     * @tparam ObservationScalarType Scalar type for observations
+     * @tparam TimeType Time type
+     * @param group Group to write to
+     * @param observationSet The observation set data
+     * @param includeFilteredObservations Whether to include filtered observations
+     */
+    template< typename ObservationScalarType, typename TimeType >
+    void writeObservationSetData(
+        HighFive::Group& group,
+        const std::shared_ptr< observation_models::SingleObservationSet< ObservationScalarType, TimeType > >& observationSet,
+        bool includeFilteredObservations );
+    
     HighFive::File file_;
     std::string filePath_;
     bool isOpen_;
     std::vector< TrajectoryConfig > trajectoryConfigs_;
+    std::vector< ObservationXDMFConfig > observationConfigs_;
 };
 
 // ================================================================================================
@@ -600,6 +811,454 @@ void HDF5OutputFile::writeMetadata(
     
     double totalFuncEvals = results->getTotalNumberOfFunctionEvaluations( );
     group.createAttribute< double >( "total_function_evaluations", totalFuncEvals );
+}
+
+// ================================================================================================
+// Observation export template implementations
+// ================================================================================================
+
+template< typename ObservationScalarType, typename TimeType >
+void HDF5OutputFile::writeObservationSetData(
+    HighFive::Group& group,
+    const std::shared_ptr< observation_models::SingleObservationSet< ObservationScalarType, TimeType > >& observationSet,
+    bool includeFilteredObservations )
+{
+    // Get observation data
+    auto observations = observationSet->getObservations( );
+    auto times = observationSet->getObservationTimes( );
+    auto weights = observationSet->getWeights( );
+    auto residuals = observationSet->getResiduals( );
+    auto depVars = observationSet->getObservationsDependentVariables( );
+    
+    unsigned int numObs = observationSet->getNumberOfObservables( );
+    unsigned int obsSize = observationSet->getSingleObservableSize( );
+    
+    if ( numObs == 0 )
+    {
+        // Write empty marker attribute
+        group.createAttribute< int >( "num_observations", 0 );
+        return;
+    }
+    
+    // Convert and write observations (2D array: numObs x obsSize)
+    std::vector< std::vector< double > > obsArrays;
+    convertObservationsToArrays( observations, obsArrays );
+    group.createDataSet< double >( "observations", 
+                                   HighFive::DataSpace( { numObs, obsSize } ) )
+         .write( obsArrays );
+    
+    // Convert and write times (1D array)
+    std::vector< double > doubleTimes;
+    convertObservationTimesToDoubleArray( times, doubleTimes );
+    group.createDataSet< double >( "times", 
+                                   HighFive::DataSpace( { doubleTimes.size( ) } ) )
+         .write( doubleTimes );
+    
+    // Convert and write weights (2D array: numObs x obsSize)
+    std::vector< std::vector< double > > weightArrays;
+    convertObservationsToArrays( weights, weightArrays );
+    group.createDataSet< double >( "weights", 
+                                   HighFive::DataSpace( { numObs, obsSize } ) )
+         .write( weightArrays );
+    
+    // Convert and write residuals (2D array: numObs x obsSize)
+    std::vector< std::vector< double > > residualArrays;
+    convertObservationsToArrays( residuals, residualArrays );
+    group.createDataSet< double >( "residuals", 
+                                   HighFive::DataSpace( { numObs, obsSize } ) )
+         .write( residualArrays );
+    
+    // Write dependent variables if available
+    if ( !depVars.empty( ) )
+    {
+        size_t depVarSize = depVars[0].size( );
+        std::vector< std::vector< double > > depVarArrays;
+        for ( const auto& dv : depVars )
+        {
+            std::vector< double > dvVec( dv.size( ) );
+            for ( int i = 0; i < dv.size( ); ++i )
+            {
+                dvVec[i] = dv( i );
+            }
+            depVarArrays.push_back( dvVec );
+        }
+        group.createDataSet< double >( "dependent_variables", 
+                                       HighFive::DataSpace( { numObs, depVarSize } ) )
+             .write( depVarArrays );
+        
+        // Write dependent variable ID mapping
+        auto depVarBookkeeping = observationSet->getDependentVariableBookkeeping( );
+        if ( depVarBookkeeping != nullptr )
+        {
+            auto depVarIdMap = convertDependentVariableBookkeepingToIdMap( depVarBookkeeping );
+            if ( !depVarIdMap.empty( ) )
+            {
+                writeIdMapping( group, "dependent_variable_ids", depVarIdMap );
+            }
+        }
+    }
+    
+    // Write link ends
+    writeLinkEnds( group, observationSet->getLinkEnds( ).linkEnds_ );
+    
+    // Write metadata as attributes
+    int observableTypeInt = static_cast< int >( observationSet->getObservableType( ) );
+    group.createAttribute< int >( "observable_type", observableTypeInt );
+    group.createAttribute< std::string >( "observable_type_name", 
+                                          getObservableTypeName( observationSet->getObservableType( ) ) );
+    group.createAttribute< int >( "reference_link_end", 
+                                  static_cast< int >( observationSet->getReferenceLinkEnd( ) ) );
+    group.createAttribute< unsigned int >( "num_observations", numObs );
+    group.createAttribute< unsigned int >( "single_observation_size", obsSize );
+    
+    // Write time bounds
+    auto timeBounds = observationSet->getTimeBounds( );
+    std::vector< double > timeBoundsVec = { timeToDouble( timeBounds.first ), 
+                                            timeToDouble( timeBounds.second ) };
+    group.createDataSet< double >( "time_bounds", 
+                                   HighFive::DataSpace( { 2 } ) )
+         .write( timeBoundsVec );
+    
+    // Handle filtered observations if requested
+    if ( includeFilteredObservations )
+    {
+        auto filteredSet = observationSet->getFilteredObservationSet( );
+        if ( filteredSet != nullptr && filteredSet->getNumberOfObservables( ) > 0 )
+        {
+            HighFive::Group filteredGroup = group.createGroup( "filtered_observations" );
+            writeObservationSetData( filteredGroup, filteredSet, false ); // Don't recurse further
+        }
+    }
+}
+
+template< typename ObservationScalarType, typename TimeType >
+void HDF5OutputFile::addSingleObservationSet(
+    const std::shared_ptr< observation_models::SingleObservationSet< ObservationScalarType, TimeType > >& observationSet,
+    const std::string& setName,
+    const std::string& groupPath,
+    bool includeFilteredObservations )
+{
+    if ( !isOpen_ )
+    {
+        throw std::runtime_error( "HDF5OutputFile: File is not open" );
+    }
+    
+    // Create the observation set group
+    std::string fullPath = groupPath + "/" + setName;
+    HighFive::Group setGroup = createGroupRecursive( fullPath );
+    
+    // Write the observation set data
+    writeObservationSetData( setGroup, observationSet, includeFilteredObservations );
+    
+    // Track observation configuration for XDMF generation
+    unsigned int numObs = observationSet->getNumberOfObservables( );
+    if ( numObs > 0 )
+    {
+        ObservationXDMFConfig obsConfig;
+        obsConfig.setName = setName;
+        obsConfig.observableTypeName = getObservableTypeName( observationSet->getObservableType( ) );
+        obsConfig.h5FilePath = filePath_;
+        obsConfig.h5GroupPath = fullPath;
+        obsConfig.numObservations = numObs;
+        obsConfig.observableSize = observationSet->getSingleObservableSize( );
+        obsConfig.hasWeights = true;
+        obsConfig.hasResiduals = true;
+        
+        // Check for dependent variables
+        auto depVars = observationSet->getObservationsDependentVariables( );
+        if ( !depVars.empty( ) )
+        {
+            obsConfig.hasDependentVariables = true;
+            obsConfig.dependentVariablesDataset = "dependent_variables";
+            obsConfig.dependentVariablesSize = depVars[0].size( );
+            
+            // Create XDMF attribute configs for dependent variables
+            auto depVarBookkeeping = observationSet->getDependentVariableBookkeeping( );
+            if ( depVarBookkeeping != nullptr )
+            {
+                auto depVarIdMap = convertDependentVariableBookkeepingToIdMap( depVarBookkeeping );
+                for ( const auto& [indexPair, name] : depVarIdMap )
+                {
+                    XDMFAttributeConfig attrConfig;
+                    attrConfig.name = name;
+                    attrConfig.h5FilePath = filePath_;
+                    attrConfig.datasetPath = fullPath + "/dependent_variables";
+                    attrConfig.numElements = numObs;
+                    
+                    int startIdx = indexPair.first;
+                    int size = indexPair.second;
+                    
+                    if ( size == 1 )
+                    {
+                        attrConfig.type = XDMFAttributeType::Scalar;
+                        attrConfig.columnIndices = { startIdx };
+                    }
+                    else if ( size == 3 )
+                    {
+                        attrConfig.type = XDMFAttributeType::Vector;
+                        attrConfig.columnIndices = { startIdx, startIdx + 1, startIdx + 2 };
+                    }
+                    else
+                    {
+                        attrConfig.type = XDMFAttributeType::Scalar;
+                        attrConfig.columnIndices = { startIdx };
+                    }
+                    
+                    obsConfig.dependentVariableAttributes.push_back( attrConfig );
+                }
+            }
+        }
+        
+        observationConfigs_.push_back( obsConfig );
+    }
+}
+
+template< typename ObservationScalarType, typename TimeType >
+void HDF5OutputFile::addObservationCollection(
+    const std::shared_ptr< observation_models::ObservationCollection< ObservationScalarType, TimeType > >& observationCollection,
+    const std::string& collectionName,
+    const std::string& groupPath,
+    bool includeFilteredObservations )
+{
+    if ( !isOpen_ )
+    {
+        throw std::runtime_error( "HDF5OutputFile: File is not open" );
+    }
+    
+    // Create the collection group
+    std::string fullPath = groupPath + "/" + collectionName;
+    HighFive::Group collectionGroup = createGroupRecursive( fullPath );
+    
+    // Create metadata group
+    HighFive::Group metadataGroup = collectionGroup.createGroup( "metadata" );
+    
+    // Get observable types and write them
+    auto observableTypes = observationCollection->getObservableTypes( );
+    std::vector< int > obsTypeInts;
+    std::vector< std::string > obsTypeNames;
+    for ( const auto& obsType : observableTypes )
+    {
+        obsTypeInts.push_back( static_cast< int >( obsType ) );
+        obsTypeNames.push_back( getObservableTypeName( obsType ) );
+    }
+    metadataGroup.createDataSet< int >( "observable_types", 
+                                        HighFive::DataSpace( { obsTypeInts.size( ) } ) )
+                 .write( obsTypeInts );
+    metadataGroup.createDataSet( "observable_type_names", obsTypeNames );
+    
+    // Write total observation size
+    int totalObsSize = observationCollection->getTotalObservableSize( );
+    metadataGroup.createAttribute< int >( "total_observation_size", totalObsSize );
+    
+    // Write time bounds
+    auto timeBounds = observationCollection->getTimeBoundsDouble( );
+    std::vector< double > timeBoundsVec = { timeBounds.first, timeBounds.second };
+    metadataGroup.createDataSet< double >( "time_bounds", 
+                                           HighFive::DataSpace( { 2 } ) )
+                 .write( timeBoundsVec );
+    
+    // Write link end identifier map
+    auto linkEndIdMap = observationCollection->getLinkEndIdentifierMap( );
+    std::vector< int > linkEndIdValues;
+    std::vector< std::string > linkEndIdStrings;
+    for ( const auto& [linkEnds, id] : linkEndIdMap )
+    {
+        linkEndIdValues.push_back( id );
+        // Create a string representation of the link ends
+        std::string linkEndsStr;
+        for ( const auto& [linkEndType, linkEndId] : linkEnds )
+        {
+            if ( !linkEndsStr.empty( ) ) linkEndsStr += ";";
+            linkEndsStr += std::to_string( static_cast< int >( linkEndType ) ) + ":" +
+                          linkEndId.bodyName_ + ":" + linkEndId.stationName_;
+        }
+        linkEndIdStrings.push_back( linkEndsStr );
+    }
+    if ( !linkEndIdValues.empty( ) )
+    {
+        metadataGroup.createDataSet< int >( "link_end_ids", 
+                                            HighFive::DataSpace( { linkEndIdValues.size( ) } ) )
+                     .write( linkEndIdValues );
+        metadataGroup.createDataSet( "link_end_strings", linkEndIdStrings );
+    }
+    
+    // Create concatenated data group
+    HighFive::Group concatenatedGroup = collectionGroup.createGroup( "concatenated" );
+    
+    // Get concatenated data
+    auto concatenatedObs = observationCollection->getObservationVector( );
+    auto concatenatedTimes = observationCollection->getConcatenatedDoubleTimeVector( );
+    auto concatenatedWeights = observationCollection->getUnparsedConcatenatedWeights( );
+    auto concatenatedResiduals = observationCollection->getConcatenatedResiduals( );
+    auto concatenatedLinkEndIds = observationCollection->getConcatenatedLinkEndIds( );
+    
+    // Write concatenated observations
+    if ( concatenatedObs.size( ) > 0 )
+    {
+        std::vector< double > obsVec( concatenatedObs.size( ) );
+        for ( int i = 0; i < concatenatedObs.size( ); ++i )
+        {
+            obsVec[i] = static_cast< double >( concatenatedObs( i ) );
+        }
+        concatenatedGroup.createDataSet< double >( "observations", 
+                                                   HighFive::DataSpace( { obsVec.size( ) } ) )
+                         .write( obsVec );
+    }
+    
+    // Write concatenated times
+    if ( !concatenatedTimes.empty( ) )
+    {
+        concatenatedGroup.createDataSet< double >( "times", 
+                                                   HighFive::DataSpace( { concatenatedTimes.size( ) } ) )
+                         .write( concatenatedTimes );
+    }
+    
+    // Write concatenated weights
+    if ( concatenatedWeights.size( ) > 0 )
+    {
+        std::vector< double > weightsVec( concatenatedWeights.size( ) );
+        for ( int i = 0; i < concatenatedWeights.size( ); ++i )
+        {
+            weightsVec[i] = concatenatedWeights( i );
+        }
+        concatenatedGroup.createDataSet< double >( "weights", 
+                                                   HighFive::DataSpace( { weightsVec.size( ) } ) )
+                         .write( weightsVec );
+    }
+    
+    // Write concatenated residuals
+    if ( concatenatedResiduals.size( ) > 0 )
+    {
+        std::vector< double > residualsVec( concatenatedResiduals.size( ) );
+        for ( int i = 0; i < concatenatedResiduals.size( ); ++i )
+        {
+            residualsVec[i] = static_cast< double >( concatenatedResiduals( i ) );
+        }
+        concatenatedGroup.createDataSet< double >( "residuals", 
+                                                   HighFive::DataSpace( { residualsVec.size( ) } ) )
+                         .write( residualsVec );
+    }
+    
+    // Write concatenated link end IDs
+    if ( !concatenatedLinkEndIds.empty( ) )
+    {
+        concatenatedGroup.createDataSet< int >( "link_end_ids", 
+                                                HighFive::DataSpace( { concatenatedLinkEndIds.size( ) } ) )
+                         .write( concatenatedLinkEndIds );
+    }
+    
+    // Write observation set start and size mapping
+    auto obsSetStartAndSize = observationCollection->getConcatenatedObservationSetStartAndSize( );
+    if ( !obsSetStartAndSize.empty( ) )
+    {
+        std::vector< std::vector< int > > startAndSizeArray;
+        for ( const auto& [start, size] : obsSetStartAndSize )
+        {
+            startAndSizeArray.push_back( { start, size } );
+        }
+        concatenatedGroup.createDataSet< int >( "observation_set_start_and_size", 
+                                                HighFive::DataSpace( { startAndSizeArray.size( ), 2 } ) )
+                         .write( startAndSizeArray );
+    }
+    
+    // Create by_observable_type group with detailed per-set data
+    HighFive::Group byTypeGroup = collectionGroup.createGroup( "by_observable_type" );
+    
+    auto observationSets = observationCollection->getObservationsSets( );
+    for ( const auto& [obsType, linkEndsMap] : observationSets )
+    {
+        std::string obsTypeName = getObservableTypeName( obsType );
+        // Replace invalid characters for HDF5 group names
+        std::replace( obsTypeName.begin( ), obsTypeName.end( ), ' ', '_' );
+        std::replace( obsTypeName.begin( ), obsTypeName.end( ), '-', '_' );
+        
+        HighFive::Group obsTypeGroup = byTypeGroup.createGroup( obsTypeName );
+        
+        int linkEndsCounter = 0;
+        for ( const auto& [linkEnds, sets] : linkEndsMap )
+        {
+            // Create link ends group with a unique identifier
+            std::string linkEndsGroupName = "link_ends_" + std::to_string( linkEndsCounter++ );
+            HighFive::Group linkEndsGroup = obsTypeGroup.createGroup( linkEndsGroupName );
+            
+            // Write the link ends for reference
+            writeLinkEnds( linkEndsGroup, linkEnds );
+            
+            // Write each observation set
+            int setCounter = 0;
+            for ( const auto& set : sets )
+            {
+                std::string setGroupName = "set_" + std::to_string( setCounter++ );
+                HighFive::Group setGroup = linkEndsGroup.createGroup( setGroupName );
+                writeObservationSetData( setGroup, set, includeFilteredObservations );
+                
+                // Track observation configuration for XDMF generation
+                unsigned int numObs = set->getNumberOfObservables( );
+                if ( numObs > 0 )
+                {
+                    std::string setFullPath = fullPath + "/by_observable_type/" + obsTypeName + 
+                                              "/" + linkEndsGroupName + "/" + setGroupName;
+                    
+                    ObservationXDMFConfig obsConfig;
+                    obsConfig.setName = collectionName + "_" + obsTypeName + "_" + 
+                                        linkEndsGroupName + "_" + setGroupName;
+                    obsConfig.observableTypeName = obsTypeName;
+                    obsConfig.h5FilePath = filePath_;
+                    obsConfig.h5GroupPath = setFullPath;
+                    obsConfig.numObservations = numObs;
+                    obsConfig.observableSize = set->getSingleObservableSize( );
+                    obsConfig.hasWeights = true;
+                    obsConfig.hasResiduals = true;
+                    
+                    // Check for dependent variables
+                    auto depVars = set->getObservationsDependentVariables( );
+                    if ( !depVars.empty( ) )
+                    {
+                        obsConfig.hasDependentVariables = true;
+                        obsConfig.dependentVariablesDataset = "dependent_variables";
+                        obsConfig.dependentVariablesSize = depVars[0].size( );
+                        
+                        auto depVarBookkeeping = set->getDependentVariableBookkeeping( );
+                        if ( depVarBookkeeping != nullptr )
+                        {
+                            auto depVarIdMap = convertDependentVariableBookkeepingToIdMap( depVarBookkeeping );
+                            for ( const auto& [indexPair, name] : depVarIdMap )
+                            {
+                                XDMFAttributeConfig attrConfig;
+                                attrConfig.name = name;
+                                attrConfig.h5FilePath = filePath_;
+                                attrConfig.datasetPath = setFullPath + "/dependent_variables";
+                                attrConfig.numElements = numObs;
+                                
+                                int startIdx = indexPair.first;
+                                int size = indexPair.second;
+                                
+                                if ( size == 1 )
+                                {
+                                    attrConfig.type = XDMFAttributeType::Scalar;
+                                    attrConfig.columnIndices = { startIdx };
+                                }
+                                else if ( size == 3 )
+                                {
+                                    attrConfig.type = XDMFAttributeType::Vector;
+                                    attrConfig.columnIndices = { startIdx, startIdx + 1, startIdx + 2 };
+                                }
+                                else
+                                {
+                                    attrConfig.type = XDMFAttributeType::Scalar;
+                                    attrConfig.columnIndices = { startIdx };
+                                }
+                                
+                                obsConfig.dependentVariableAttributes.push_back( attrConfig );
+                            }
+                        }
+                    }
+                    
+                    observationConfigs_.push_back( obsConfig );
+                }
+            }
+        }
+    }
 }
 
 }  // namespace io

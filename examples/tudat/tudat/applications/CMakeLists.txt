@@ -28,6 +28,29 @@ target_link_libraries(horizons_example
         PRIVATE tudat_horizons_interface CURL::libcurl
         )
 
+# Build hdf5SingleProcess example application
+find_package(HighFive CONFIG REQUIRED)
+find_package(HDF5 REQUIRED COMPONENTS CXX)
+
+TUDAT_ADD_EXECUTABLE(hdf5SingleProcess
+        "hdf5SingleProcess.cpp"
+        ${Tudat_ESTIMATION_LIBRARIES}
+        )
+target_link_libraries(hdf5SingleProcess 
+        PUBLIC ${Tudat_ESTIMATION_LIBRARIES}
+        PRIVATE HighFive HDF5::HDF5
+        )
+
+# Build hdf5_orbit_example - demonstrates HDF5 output for orbit propagation
+TUDAT_ADD_EXECUTABLE(hdf5_orbit_example
+        "hdf5_orbit_example.cpp"
+        ${Tudat_ESTIMATION_LIBRARIES}
+        )
+target_link_libraries(hdf5_orbit_example 
+        PUBLIC ${Tudat_ESTIMATION_LIBRARIES}
+        PRIVATE HighFive HDF5::HDF5
+        )
+
 # Build bepicolombo application with liblro library
 # add_library(lro STATIC liblro.cpp liblro.h)
 # target_include_directories(lro PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

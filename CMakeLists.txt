@@ -269,6 +269,16 @@ endif ()
 # Set compiler based on user input
 include(compiler)
 
+# Enable ccache for faster builds
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    message(STATUS "ccache found: ${CCACHE_PROGRAM}. Enabling ccache for C/C++ compilers.")
+    set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+else()
+    message(WARNING "ccache not found. Builds will not be cached.")
+endif()
+
 # Find Boost and check GLBICXX_USE_CXX11_ABI (TODO: Better description)
 include(TudatFindBoost)
 message(STATUS "Checking for _GLIBCXX_USE_CXX11_ABI definition...")
@@ -388,9 +398,10 @@ else( )
 endif( )
 
 # JSON dependency
-if (TUDAT_BUILD_WITH_JSON_INTERFACE)
+if (TUDAT_BUILD_WITH_JSON_INTERFACE OR TUDAT_BUILD_WITH_ESTIMATION_TOOLS)
     find_package(nlohmann_json REQUIRED 3.7.3)
 endif ()
+
 
 # TODO: Not sure if this is needed. Comes from CMake of tudatpy
 set(Boost_USE_STATIC_LIBS OFF)

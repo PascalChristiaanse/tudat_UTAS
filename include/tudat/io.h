@@ -44,5 +44,6 @@
 #include "io/twoLineElementData.h"
 #include "io/twoLineElementsTextFileReader.h"
 #include "io/util.h"
+#include "io/unifiedDataLibraryReader.h"
 
 #endif  // TUDAT_IO_H

@@ -433,12 +433,13 @@ Eigen::Vector3d UTASTudatFormatter::convertToTudatGeodetic( const GeodeticPositi
     return Eigen::Vector3d( altitude, latitude, longitude );
 }
 
-std::shared_ptr< tom::ObservationCollection< double, double > > 
+std::shared_ptr< tom::ObservationCollection< double, Time > > 
 UTASTudatFormatter::toTudat( const UTASObservationCollection& collection,
                              simulation_setup::SystemOfBodies& bodies,
                              const std::vector< std::string >& includedTargets,
                              const std::string& stationBody )
 {
+    using tudat::Time;
     // Ensure station body exists
     try
     {
@@ -515,7 +516,7 @@ UTASTudatFormatter::toTudat( const UTASObservationCollection& collection,
     }
     
     // Build observation sets
-    std::vector< std::shared_ptr< tom::SingleObservationSet< double, double > > > observationSetList;
+    std::vector< std::shared_ptr< tom::SingleObservationSet< double, Time > > > observationSetList;
     
     const auto& allObs = collection.getAllObservations( );
     for( const auto& targetEntry : allObs )
@@ -542,7 +543,7 @@ UTASTudatFormatter::toTudat( const UTASObservationCollection& collection,
             tom::LinkDefinition linkDefinition( linkEnds );
             
             // Accumulate observations from all sets for this link
-            std::vector< double > observationTimes;
+            std::vector< Time > observationTimes;
             std::vector< Eigen::VectorXd > tdoaObservations;
             std::vector< Eigen::VectorXd > fdoaObservations;
             
@@ -552,7 +553,7 @@ UTASTudatFormatter::toTudat( const UTASObservationCollection& collection,
                 
                 for( size_t i = 0; i < timeSeries.size( ); ++i )
                 {
-                    observationTimes.push_back( timeSeries.epochs[ i ] );
+                    observationTimes.push_back( Time( timeSeries.epochs[ i ] ) );
                     
                     Eigen::VectorXd tdoaEntry( 1 );
                     tdoaEntry( 0 ) = timeSeries.tdoa[ i ];
@@ -565,7 +566,7 @@ UTASTudatFormatter::toTudat( const UTASObservationCollection& collection,
             }
             
             // Create TDOA observation set
-            auto tdoaSet = std::make_shared< tom::SingleObservationSet< double, double > >(
+            auto tdoaSet = std::make_shared< tom::SingleObservationSet< double, Time > >(
                 tom::differenced_time_of_arrival,
                 linkDefinition,
                 tdoaObservations,
@@ -574,7 +575,7 @@ UTASTudatFormatter::toTudat( const UTASObservationCollection& collection,
             observationSetList.push_back( tdoaSet );
             
             // Create FDOA observation set
-            auto fdoaSet = std::make_shared< tom::SingleObservationSet< double, double > >(
+            auto fdoaSet = std::make_shared< tom::SingleObservationSet< double, Time > >(
                 tom::differenced_frequency_of_arrival,
                 linkDefinition,
                 fdoaObservations,
@@ -584,7 +585,7 @@ UTASTudatFormatter::toTudat( const UTASObservationCollection& collection,
         }
     }
     
-    return std::make_shared< tom::ObservationCollection< double, double > >( observationSetList );
+    return std::make_shared< tom::ObservationCollection< double, Time > >( observationSetList );
 }
 
 
@@ -597,7 +598,7 @@ BatchVLBI::BatchVLBI( const std::vector< std::string >& filePaths )
 {
 }
 
-std::shared_ptr< tom::ObservationCollection< double, double > > 
+std::shared_ptr< tom::ObservationCollection< double, Time > > 
 BatchVLBI::toTudat( simulation_setup::SystemOfBodies& bodies,
                     const std::vector< std::string >& includedTargets,
                     const std::string& stationBody )

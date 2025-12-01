@@ -315,7 +315,7 @@ public:
      * @param stationBody Body on which to place ground stations (default: "Earth")
      * @return Tudat observation collection
      */
-    std::shared_ptr< tom::ObservationCollection< double, double > > 
+    std::shared_ptr< tom::ObservationCollection< double, Time > > 
     toTudat( const UTASObservationCollection& collection,
              simulation_setup::SystemOfBodies& bodies,
              const std::vector< std::string >& includedTargets = {},
@@ -354,7 +354,7 @@ public:
      * 
      * Creates ground stations and returns observations in Tudat format.
      */
-    std::shared_ptr< tom::ObservationCollection< double, double > > 
+    std::shared_ptr< tom::ObservationCollection< double, Time > > 
     toTudat( simulation_setup::SystemOfBodies& bodies,
              const std::vector< std::string >& includedTargets = {},
              const std::string& stationBody = "Earth" );

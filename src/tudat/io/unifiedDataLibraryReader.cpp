@@ -297,7 +297,7 @@ double UTASObservationSet::convertIsoStringToEpoch( const std::string& isoTime )
         double timeInUTC = tba::timeFromDecomposedDateTime< double >( year, month, day, hour, minute, second );
         
         // Convert UTC to TDB using time scale converter
-        // Use a dummy position (Earth center) - the difference is sub-millisecond
+        // Use a dummy position @ TODO improve with actual station position
         Eigen::Vector3d dummyPosition( 6378.0e3, 0.0, 0.0 );
         double timeInTDB = timeConverter_->getCurrentTime< double >(
             tba::TimeScales::utc_scale, tba::TimeScales::tdb_scale, timeInUTC, dummyPosition );
@@ -430,8 +430,7 @@ Eigen::Vector3d UTASTudatFormatter::convertToTudatGeodetic( const GeodeticPositi
         altitude *= 1000.0;
     }
     
-    // Tudat expects: (longitude, latitude, altitude) in (rad, rad, m)
-    return Eigen::Vector3d( longitude, latitude, altitude );
+    return Eigen::Vector3d( altitude, latitude, longitude );
 }
 
 std::shared_ptr< tom::ObservationCollection< double, double > > 
@@ -464,8 +463,8 @@ UTASTudatFormatter::toTudat( const UTASObservationCollection& collection,
         Eigen::Vector3d tudatPos = convertToTudatGeodetic( pos );
         
         std::cout << "    Tudat position (rad, rad, m): " 
-                  << tudatPos( 1 ) << ", " << tudatPos( 0 ) << ", " << tudatPos( 2 ) << std::endl;
-        
+                  << tudatPos( 1 ) << ", " << tudatPos( 2 ) << ", " << tudatPos( 0 ) << std::endl;
+
         simulation_setup::createGroundStation(
             bodies.getBody( stationBody ), 
             stationName, 
@@ -537,9 +536,9 @@ UTASTudatFormatter::toTudat( const UTASObservationCollection& collection,
             
             // Create link definition
             tom::LinkEnds linkEnds;
-            linkEnds[ tom::receiver ] = std::make_pair( station1, stationBody );
-            linkEnds[ tom::receiver2 ] = std::make_pair( station2, stationBody );
-            linkEnds[ tom::transmitter2 ] = std::make_pair( target, std::string( "" ) );
+            linkEnds[ tom::receiver ] = std::make_pair( stationBody, station1 );
+            linkEnds[ tom::receiver2 ] = std::make_pair( stationBody, station2 );
+            linkEnds[ tom::transmitter ] = std::make_pair( target, std::string( "" ) );
             tom::LinkDefinition linkDefinition( linkEnds );
             
             // Accumulate observations from all sets for this link

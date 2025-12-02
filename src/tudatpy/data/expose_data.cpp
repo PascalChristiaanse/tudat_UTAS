@@ -26,6 +26,7 @@
 #include "tudat/io/readVariousPdsFiles.h"
 #include "tudat/io/solarActivityData.h"
 #include "unified_data_library/expose_unified_data_library_reader.h"
+#include "hdf5_manager/expose_hdf5_manager.h"
 
 namespace py = pybind11;
 namespace tio = tudat::input_output;
@@ -562,10 +563,14 @@ void expose_data( py::module& m )
            py::arg( "body_with_ground_stations_name" ) = "Earth",
            R"doc(No documentation available.)doc" );
 
-    // Expose unified data library submodule
-    py::module unified_data_library_submodule = m.def_submodule( "unified_data_library", 
-        R"doc(Submodule for reading and processing Unified Data Library (UDL) files.)doc" );
+    // Create submodules and expose their bindings
+    auto unified_data_library_submodule = m.def_submodule( "unified_data_library",
+            "Submodule for reading and processing Unified Data Library (UDL) files." );
     unified_data_library::expose_unified_data_library_reader( unified_data_library_submodule );
+
+    auto hdf5_manager_submodule = m.def_submodule( "hdf5_manager",
+            "Submodule for writing simulation results to HDF5 files with XDMF support." );
+    hdf5_manager::expose_hdf5_manager( hdf5_manager_submodule );
 };
 
 }  // namespace data

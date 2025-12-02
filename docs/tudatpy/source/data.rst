@@ -21,6 +21,9 @@ to read inputs from other softwares and integrate them with Tudat(py).
    data/processTrk234
    data/mission_data_downloader
    data/unified_data_library
+   data/hdf5_manager
+
+
 
 
 Functions

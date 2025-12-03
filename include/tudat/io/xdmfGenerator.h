@@ -192,7 +192,7 @@ protected:
                             const std::string& datasetPath,
                             const std::vector< size_t >& dimensions,
                             const std::string& numberType = "Float",
-                            int precision = 8,
+                            int precision = 15,
                             int indentLevel = 4 );
 
     //! Write an HDF5 DataItem with HyperSlab (for extracting columns)
@@ -205,7 +205,7 @@ protected:
                                      size_t countRows,
                                      size_t countCols,
                                      const std::string& numberType = "Float",
-                                     int precision = 8,
+                                     int precision = 15,
                                      int indentLevel = 4 );
 
     //! Write a Function DataItem that joins multiple HyperSlabs into a vector
@@ -216,7 +216,7 @@ protected:
                                      size_t numRows,
                                      const std::vector< int >& columnIndices,
                                      const std::string& numberType = "Float",
-                                     int precision = 8,
+                                     int precision = 15,
                                      int indentLevel = 4 );
 
     //! Get indent string

@@ -2881,15 +2881,8 @@ public:
                                             stationStates,
                                             observableTimeScale );
 
-                    if( differencedFrequencyOfArrivalModel->getFirstReceiverLightTimeCalculator( )->doCorrectionsNeedFrequency( ) ||
-                        differencedFrequencyOfArrivalModel->getSecondReceiverLightTimeCalculator( )->doCorrectionsNeedFrequency( ) )
-                    {
-                        differencedFrequencyOfArrivalModel->setFrequencyInterpolator( getTransmittingFrequencyInterpolator( bodies, linkEnds ) );
-                    }
-                    else
-                    {
-                        differencedFrequencyOfArrivalModel->setTimeScaleConverter( );
-                    }
+                    // Always set the frequency interpolator for FDOA - required for transmitter frequency computation
+                    differencedFrequencyOfArrivalModel->setFrequencyInterpolator( getTransmittingFrequencyInterpolator( bodies, linkEnds ) );
 
                     observationModel = differencedFrequencyOfArrivalModel;
                     break;

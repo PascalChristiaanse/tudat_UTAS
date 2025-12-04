@@ -12,6 +12,7 @@
 #define TUDAT_DIFFERENCEDFREQUENCYOFARRIVALOBSERVATIONMODEL_H
 
 #include <map>
+#include <iostream>
 
 #include <functional>
 
@@ -35,6 +36,8 @@ class OneWayDifferencedFrequencyOfArrivalObservationModel : public ObservationMo
 public:
     typedef Eigen::Matrix< ObservationScalarType, 6, 1 > StateType;
     typedef Eigen::Matrix< ObservationScalarType, 3, 1 > PositionType;
+    
+    using ObservationModel< 1, ObservationScalarType, TimeType >::frequencyInterpolator_;
     
     OneWayDifferencedFrequencyOfArrivalObservationModel(
             const LinkEnds& linkEnds,
@@ -113,25 +116,51 @@ public:
 
         // ==================== FDOA COMPUTATION (FULL RELATIVISTIC) ====================
         
-        // Retrieve transmitter frequency from ancillary settings (required)
+        // Retrieve transmitter frequency - prefer interpolator, fall back to ancillary settings
         ObservationScalarType transmitterFrequency;
-        if( ancilliarySetingsInput == nullptr )
+        
+        if( frequencyInterpolator_ != nullptr )
         {
-            throw std::runtime_error(
-                    "Error when computing FDOA observable: ancillary settings are required. "
-                    "Transmitter frequency must be specified using getFdoaAncilliarySettings()." );
+            // Use frequency interpolator at transmitter time
+            transmitterFrequency = frequencyInterpolator_->
+                template getTemplatedCurrentFrequency< ObservationScalarType, double >( linkEndTimes[ 0 ] );
+            
+            // Store in ancillary settings for partials computation (if settings object exists)
+            if( ancilliarySetingsInput != nullptr )
+            {
+                ancilliarySetingsInput->setAncilliaryDoubleData( 
+                    fdoa_transmitter_frequency, 
+                    static_cast< double >( transmitterFrequency ) );
+            }
         }
-        try
+        else if( ancilliarySetingsInput != nullptr )
         {
-            transmitterFrequency = static_cast< ObservationScalarType >(
+            // Graceful degradation: warn and fall back to ancillary settings
+            static bool warningIssued = false;
+            if( !warningIssued )
+            {
+                std::cerr << "Warning: FDOA observation model has no frequency interpolator set. "
+                          << "Falling back to ancillary settings for transmitter frequency. "
+                          << "This warning is only shown once." << std::endl;
+                warningIssued = true;
+            }
+            
+            try
+            {
+                transmitterFrequency = static_cast< ObservationScalarType >(
                     ancilliarySetingsInput->getAncilliaryDoubleData( fdoa_transmitter_frequency, true ) );
+            }
+            catch( const std::runtime_error& caughtException )
+            {
+                throw std::runtime_error(
+                    "Error when retrieving transmitter frequency for FDOA observable from ancillary settings: " +
+                    std::string( caughtException.what( ) ) );
+            }
         }
-        catch( const std::runtime_error& caughtException )
+        else
         {
-            throw std::runtime_error(
-                    "Error when retrieving transmitter frequency for FDOA observable: " +
-                    std::string( caughtException.what( ) ) +
-                    "\nTransmitter frequency must be specified using getFdoaAncilliarySettings()." );
+            throw std::runtime_error( 
+                "Error in FDOA observation: no frequency interpolator set and no ancillary settings provided." );
         }
         
         // Get speed of light

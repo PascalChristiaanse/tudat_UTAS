@@ -123,6 +123,15 @@ void expose_ancillary_settings( py::module& m )
                     :attr:`~tudatpy.estimation.observations_setup.ancillary_settings.ObservationAncilliarySimulationSettings.get_float_settings` and
                     :attr:`~tudatpy.estimation.observations_setup.ancillary_settings.ObservationAncilliarySimulationSettings.set_float_settings`
                     )doc" )
+            .value( "fdoa_transmitter_frequency",
+                    tom::ObservationAncilliarySimulationVariable::fdoa_transmitter_frequency,
+                    R"doc(
+                    Transmitter frequency :math:`f_{T}` used for the
+                    :func:`~tudatpy.estimation.observable_models_setup.model_settings.fdoa` observation model.
+                    This ancillary setting is retrieved and set using the
+                    :attr:`~tudatpy.estimation.observations_setup.ancillary_settings.ObservationAncilliarySimulationSettings.get_float_settings` and
+                    :attr:`~tudatpy.estimation.observations_setup.ancillary_settings.ObservationAncilliarySimulationSettings.set_float_settings`
+                    )doc" )
             .export_values( );
 
     py::class_< tom::ObservationAncilliarySimulationSettings, std::shared_ptr< tom::ObservationAncilliarySimulationSettings > >(

@@ -541,7 +541,7 @@ void ObservationXDMFGenerator::writeTimeGeometry( std::ostream& os,
     
     // $0: Time values (X coordinate)
     os << ind << "  <DataItem Dimensions=\"" << config.numObservations 
-       << "\" NumberType=\"Float\" Precision=\"15\" Format=\"HDF\">\n";
+       << "\" NumberType=\"Float\" Precision=\"8\" Format=\"HDF\">\n";
     os << ind << "    " << filename << ":" << fullTimesPath << "\n";
     os << ind << "  </DataItem>\n";
     
@@ -554,7 +554,7 @@ void ObservationXDMFGenerator::writeTimeGeometry( std::ostream& os,
     os << ind << "      " << config.numObservations << " 1\n";  // count
     os << ind << "    </DataItem>\n";
     os << ind << "    <DataItem Dimensions=\"" << config.numObservations << " " 
-       << config.observableSize << "\" NumberType=\"Float\" Precision=\"15\" Format=\"HDF\">\n";
+       << config.observableSize << "\" NumberType=\"Float\" Precision=\"8\" Format=\"HDF\">\n";
     os << ind << "      " << filename << ":" << fullObsPath << "\n";
     os << ind << "    </DataItem>\n";
     os << ind << "  </DataItem>\n";
@@ -563,7 +563,7 @@ void ObservationXDMFGenerator::writeTimeGeometry( std::ostream& os,
     os << ind << "  <DataItem ItemType=\"Function\" Function=\"0 * $0\" Dimensions=\"" 
        << config.numObservations << "\">\n";
     os << ind << "    <DataItem Dimensions=\"" << config.numObservations 
-       << "\" NumberType=\"Float\" Precision=\"15\" Format=\"HDF\">\n";
+       << "\" NumberType=\"Float\" Precision=\"8\" Format=\"HDF\">\n";
     os << ind << "      " << filename << ":" << fullTimesPath << "\n";
     os << ind << "    </DataItem>\n";
     os << ind << "  </DataItem>\n";

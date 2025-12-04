@@ -940,6 +940,15 @@ inside a `Body` instance and used in observation corrections or environmental qu
                     transmitted_frequency_calculator : StationFrequencyInterpolator
                         The frequency calculator object to be associated with the vehicle.
                     )doc" )
+            .def( "get_transmitted_frequency_calculator",
+                  &tsm::VehicleSystems::getTransmittedFrequencyCalculator,
+                  R"doc(
+                    Get the transmitted frequency calculator for the vehicle.
+                    Returns
+                    -------
+                    StationFrequencyInterpolator
+                        The frequency calculator object associated with the vehicle.
+                    )doc" )
             .def( "get_control_surface_deflection",
                   &tsm::VehicleSystems::getCurrentControlSurfaceDeflection,
                   py::arg( "control_surface_id" ),
@@ -2167,11 +2176,28 @@ inside a `Body` instance and used in observation corrections or environmental qu
 
     py::class_< tgs::StationFrequencyInterpolator, std::shared_ptr< tgs::StationFrequencyInterpolator > >(
             m, "TransmittingFrequencyCalculator", R"doc(No documentation found.)doc" );
+            
 
     py::class_< tgs::ConstantFrequencyInterpolator,
                 std::shared_ptr< tgs::ConstantFrequencyInterpolator >,
                 tgs::StationFrequencyInterpolator >( m, "ConstantTransmittingFrequencyCalculator" )
-            .def( py::init< double >( ), py::arg( "frequency" ) );
+            .def( py::init< double >( ), py::arg( "frequency" ) )
+            .def( "compute_current_frequency",
+                  &tgs::ConstantFrequencyInterpolator::computeCurrentFrequency< double, tudat::Time >,
+                  py::arg( "lookup_time" ),
+                  R"doc(
+                    Compute the transmitted frequency at the specified time.
+
+                    Parameters
+                    ----------
+                    lookup_time : Time
+                        Time at which to compute the frequency.
+
+                    Returns
+                    -------
+                    float
+                        Frequency value in Hz.
+                  )doc" );
 
     py::class_< tgs::PiecewiseLinearFrequencyInterpolator,
                 std::shared_ptr< tgs::PiecewiseLinearFrequencyInterpolator >,

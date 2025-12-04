@@ -1346,8 +1346,8 @@ Returns
     m.def( "differenced_time_of_arrival",
            &tom::differencedTimeOfArrivalObservationSettings,
            py::arg( "link_ends" ),
-           py::arg( "time_difference_time_scale" ) = tba::tdb_scale,
            py::arg( "light_time_correction_settings" ) = std::vector< std::shared_ptr< tom::LightTimeCorrectionSettings > >( ),
+           py::arg( "time_difference_time_scale" ) = tba::tdb_scale,
            py::arg( "bias_settings" ) = nullptr,
            py::arg( "light_time_convergence_settings" ) = std::make_shared< tom::LightTimeConvergenceCriteria >( ),
            R"doc(
@@ -1377,13 +1377,12 @@ Returns
      Set of link ends that define the geometry of the observation. This observable requires the
      ``transmitter``, ``receiver`` and ``receiver2`` :class:`~tudatpy.estimation.observable_models_setup.links.LinkEndType` entries to be defined.
 
- link_ends : TimeScales, default = tdb_scale
-     Time scale in which the epochs :math:`t_{R,1}` and :math:`t_{R,2}` are expressed before differencing to compute the observation
-
-
  light_time_correction_settings : List[ :class:`~tudatpy.estimation.observable_models_setup.light_time_corrections.LightTimeCorrectionSettings` ], default = list()
      List of corrections for the light-time that are to be used. Default is none, which will result
      in the signal being modelled as moving in a straight line with the speed of light
+
+ time_difference_time_scale : TimeScales, default = tdb_scale
+     Time scale in which the epochs :math:`t_{R,1}` and :math:`t_{R,2}` are expressed before differencing to compute the observation
 
  bias_settings : :class:`ObservationBiasSettings`, default = None
      Settings for the observation bias that is to be used for the observation, default is none (unbiased observation)

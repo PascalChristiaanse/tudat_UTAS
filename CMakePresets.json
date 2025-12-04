@@ -12,8 +12,8 @@
             "generator": "Unix Makefiles",
             "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
-                "CMAKE_PREFIX_PATH": "/opt/homebrew/Caskroom/miniconda/base/envs/tudatpy-dev",
-                "CMAKE_INSTALL_PREFIX": "/opt/homebrew/Caskroom/miniconda/base/envs/tudatpy-dev",
+                "CMAKE_PREFIX_PATH": "/home/pascal/miniconda3/envs/tudatpy-dev",
+                "CMAKE_INSTALL_PREFIX": "/home/pascal/miniconda3/envs/tudatpy-dev",
                 "Boost_NO_BOOST_CMAKE": "ON",
                 "CMAKE_BUILD_TYPE": "Release",
                 "TUDAT_BUILD_TESTS": "ON"
@@ -42,6 +42,31 @@
             "cacheVariables": {
                 "TUDAT_BUILD_TESTS": "OFF"
             }
+        },
+        {
+            "name": "debug-with-tutorials",
+            "inherits": "debug",
+            "description": "Debug build with tutorials/applications",
+            "cacheVariables": {
+                "TUDAT_BUILD_TUDAT_TUTORIALS": "ON",
+                "TUDAT_BUILD_TESTS": "OFF",
+                "CMAKE_PREFIX_PATH": "/home/pascal/miniconda3/envs/tudatpy-dev",
+                "CMAKE_INSTALL_PREFIX": "/home/pascal/miniconda3/envs/tudatpy-dev"
+            }
+        },
+        {
+            "name": "profile-with-tutorials",
+            "inherits": "default",
+            "description": "Profile build with tutorials/applications optimized for AMD uProf",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_CXX_FLAGS": "-g -O0 -fno-omit-frame-pointer",
+                "CMAKE_C_FLAGS": "-g -O0 -fno-omit-frame-pointer",
+                "TUDAT_BUILD_TUDAT_TUTORIALS": "ON",
+                "TUDAT_BUILD_TESTS": "OFF",
+                "CMAKE_PREFIX_PATH": "/home/pascal/miniconda3/envs/tudatpy-dev",
+                "CMAKE_INSTALL_PREFIX": "/home/pascal/miniconda3/envs/tudatpy-dev"
+            }
         }
     ],
     "buildPresets": [
@@ -49,7 +74,7 @@
             "name": "default-build",
             "hidden": false,
             "configurePreset": "default",
-            "jobs": 8,
+            "jobs": 16,
             "targets": [
                 "all"
             ]
@@ -57,7 +82,7 @@
         {
             "name": "default-build-no-tests",
             "configurePreset": "default-no-tests",
-            "jobs": 8,
+            "jobs": 16,
             "targets": [
                 "all"
             ]
@@ -65,7 +90,7 @@
         {
             "name": "debug-build",
             "configurePreset": "debug",
-            "jobs": 8,
+            "jobs": 16,
             "targets": [
                 "all"
             ]
@@ -73,15 +98,55 @@
         {
             "name": "debug-build-no-tests",
             "configurePreset": "debug-no-tests",
-            "jobs": 8,
+            "jobs": 16,
             "targets": [
                 "all"
             ]
         },
         {
+            "name": "debug-build-with-tutorials",
+            "configurePreset": "debug-with-tutorials",
+            "jobs": 16,
+            "targets": [
+                "all"
+            ]
+        },
+        {
+            "name": "profile-build-with-tutorials",
+            "configurePreset": "profile-with-tutorials",
+            "jobs": 16,
+            "targets": [
+                "all"
+            ]
+        },
+        {
+            "name": "profile-build-kplo-only",
+            "configurePreset": "profile-with-tutorials",
+            "jobs": 16,
+            "targets": [
+                "kplo_vlbi_estimation"
+            ]
+        },
+        {
+            "name": "simulate-Spacecraft-Tracking-Data",
+            "configurePreset": "profile-with-tutorials",
+            "jobs": 8,
+            "targets": [
+                "simulateSpacecraft"
+            ]
+        },
+        {
+            "name": "profile-build-HDF5-observation-only",
+            "configurePreset": "profile-with-tutorials",
+            "jobs": 16,
+            "targets": [
+                "hdf5_observation_example"
+            ]
+        },
+        {
             "name": "clean",
             "configurePreset": "default",
-            "jobs": 8,
+            "jobs": 16,
             "targets": [
                 "clean"
             ]

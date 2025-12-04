@@ -9,6 +9,7 @@
 #
 
 add_subdirectory(spice)
+add_subdirectory(horizons)
 
 if (TUDAT_BUILD_WITH_JSON_INTERFACE)
     add_subdirectory(json)

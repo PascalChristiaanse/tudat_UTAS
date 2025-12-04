@@ -3,6 +3,8 @@ channels:
   - conda-forge
   - tudat-team
 dependencies:
+  - highfive
+  - hdf5      # For Paraview support
   - eigen
   - boost-cpp=1.84.0
   - tudat-resources

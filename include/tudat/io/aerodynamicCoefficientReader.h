@@ -8,6 +8,9 @@
  *    http://tudat.tudelft.nl/LICENSE.
  */
 
+#ifndef TUDAT_AERODYNAMIC_COEFFICIENT_READER_H
+#define TUDAT_AERODYNAMIC_COEFFICIENT_READER_H
+
 #include <map>
 #include "tudat/basics/utilities.h"
 
@@ -202,3 +205,5 @@ readAerodynamicCoefficients( const std::map< int, std::string >& fileNames )
 }  // namespace input_output
 
 }  // namespace tudat
+
+#endif // TUDAT_AERODYNAMIC_COEFFICIENT_READER_H

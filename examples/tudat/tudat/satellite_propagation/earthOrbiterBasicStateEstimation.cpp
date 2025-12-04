@@ -90,7 +90,7 @@ int main( )
     panels.at( 0 )->setPanelTypeId( panelTypeId );
     panels.at( 1 )->setPanelTypeId( panelTypeId );
 
-    bodies.at( "Vehicle" )->setRadiationPressureTargetModels( { std::make_shared< PaneledRadiationPressureTargetModel >( panels ) } );
+    bodies.at( "Vehicle" )->setRadiationPressureTargetModels( { std::make_shared< PaneledRadiationPressureTargetModel >( panels, panels ) } );
 
     // const auto bodyShape = std::make_shared< FullPanelledBodySettings > bodyWingPanelledGeometry(2,2,2,2,0.1,0.2,0.1,0.2);
 
@@ -253,9 +253,9 @@ int main( )
 
     // Set typedefs for POD input (observation types, observation link ends, observation values, associated times with
     // reference link ends.
-    typedef Eigen::Matrix< double, Eigen::Dynamic, 1 > ObservationVectorType;
-    typedef std::map< LinkEnds, std::pair< ObservationVectorType, std::pair< std::vector< double >, LinkEndType > > >
-            SingleObservablePodInputType;
+//     typedef Eigen::Matrix< double, Eigen::Dynamic, 1 > ObservationVectorType;
+//     typedef std::map< LinkEnds, std::pair< ObservationVectorType, std::pair< std::vector< double >, LinkEndType > > >
+//             SingleObservablePodInputType;
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     //////////////////    PERTURB PARAMETER VECTOR AND ESTIMATE PARAMETERS     ////////////////////////////////////////////

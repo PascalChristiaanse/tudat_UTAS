@@ -67,6 +67,7 @@ Examples
             .value( "doppler_measured_frequency_type", tom::ObservableType::doppler_measured_frequency )
             .value( "dsn_n_way_range_type", tom::ObservableType::dsn_n_way_range )
             .value( "differenced_time_of_arrival_type", tom::ObservableType::differenced_time_of_arrival )
+            .value( "differenced_frequency_of_arrival_type", tom::ObservableType::differenced_frequency_of_arrival )
             .export_values( );
 
     py::class_< tom::DopplerProperTimeRateSettings, std::shared_ptr< tom::DopplerProperTimeRateSettings > >(
@@ -1394,6 +1395,67 @@ Returns
  -------
  :class:`ObservationModelSettings`
      Instance of the :class:`~tudatpy.estimation.observable_models_setup.model_settings.ObservationModelSettings` class defining the settings for the differenced time of arrival model.
+
+
+)doc" );
+
+    m.def( "differenced_frequency_of_arrival",
+           &tom::differencedFrequencyOfArrivalObservationSettings,
+           py::arg( "link_ends" ),
+           py::arg( "light_time_correction_settings" ) = std::vector< std::shared_ptr< tom::LightTimeCorrectionSettings > >( ),
+           py::arg( "frequency_difference_time_scale" ) = tba::tdb_scale,
+           py::arg( "bias_settings" ) = nullptr,
+           py::arg( "light_time_convergence_settings" ) = std::make_shared< tom::LightTimeConvergenceCriteria >( ),
+           R"doc(
+
+ Function for creating settings for a frequency difference of arrival (FDOA) observation model.
+
+ Function for creating settings for a frequency difference of arrival observation model. This observable computes the
+ difference in received frequency :math:`\Delta f` at two receivers for the same transmitted signal, which is sensitive to
+ the relative velocity of the transmitter with respect to the two receivers.
+
+ For a signal transmitted at frequency :math:`f_{T}` and received by two receivers with Doppler ratios :math:`d_1` and :math:`d_2`,
+ the observable :math:`h` is computed from the full relativistic Doppler formula:
+
+ .. math::
+
+    h = f_{T} \cdot (d_2 - d_1)
+
+ where the Doppler ratios are computed using the relativistic formula:
+
+ .. math::
+
+    d = \sqrt{\frac{1 + \beta}{1 - \beta}}
+
+ and :math:`\beta = \mathbf{v}_{rel} \cdot \hat{\mathbf{r}} / c` is the line-of-sight velocity component normalized by the speed of light.
+
+ The transmitter frequency :math:`f_{T}` is obtained from a frequency interpolator set on the transmitting body's vehicle systems.
+ If no interpolator is set, the model falls back to ancillary settings with a warning.
+
+
+ Parameters
+ ----------
+ link_ends : LinkDefinition
+     Set of link ends that define the geometry of the observation. This observable requires the
+     ``transmitter``, ``receiver`` and ``receiver2`` :class:`~tudatpy.estimation.observable_models_setup.links.LinkEndType` entries to be defined.
+
+ light_time_correction_settings : List[ :class:`~tudatpy.estimation.observable_models_setup.light_time_corrections.LightTimeCorrectionSettings` ], default = list()
+     List of corrections for the light-time that are to be used. Default is none, which will result
+     in the signal being modelled as moving in a straight line with the speed of light
+
+ frequency_difference_time_scale : TimeScales, default = tdb_scale
+     Time scale used for internal time computations
+
+ bias_settings : :class:`ObservationBiasSettings`, default = None
+     Settings for the observation bias that is to be used for the observation, default is none (unbiased observation)
+
+ light_time_convergence_settings : :class:`LightTimeConvergenceCriteria`, default = :func:`~tudatpy.estimation.observable_models_setup.light_time_corrections.light_time_convergence_settings`
+     Settings for convergence of the light-time
+
+ Returns
+ -------
+ :class:`ObservationModelSettings`
+     Instance of the :class:`~tudatpy.estimation.observable_models_setup.model_settings.ObservationModelSettings` class defining the settings for the differenced frequency of arrival model.
 
 
 )doc" );

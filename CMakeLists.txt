@@ -382,10 +382,8 @@ else( )
     add_definitions(-DTUDAT_BUILD_WITH_FFTW3=0)
 endif( )
 
-# JSON dependency
-if (TUDAT_BUILD_WITH_JSON_INTERFACE)
-    find_package(nlohmann_json REQUIRED 3.7.3)
-endif ()
+# JSON dependency now required for unified data library reader
+find_package(nlohmann_json REQUIRED 3.7.3)
 
 # TODO: Not sure if this is needed. Comes from CMake of tudatpy
 set(Boost_USE_STATIC_LIBS OFF)

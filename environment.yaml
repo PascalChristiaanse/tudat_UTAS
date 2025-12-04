@@ -3,6 +3,7 @@ channels:
   - conda-forge
   - tudat-team
 dependencies:
+  - nlohmann_json # used in unified data library reader
   - eigen
   - boost-cpp=1.84.0
   - tudat-resources

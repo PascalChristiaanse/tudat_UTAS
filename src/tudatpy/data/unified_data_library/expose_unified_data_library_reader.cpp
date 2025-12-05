@@ -336,54 +336,40 @@ set[str]
 )doc" );
 
     // =========================================================================
-    // BatchVLBI class (convenience class)
+    // UTASTudatFormatter class
     // =========================================================================
-    py::class_< tio::BatchVLBI >( m,
-                                   "BatchVLBI",
-                                   R"doc(
+    py::class_< tio::UTASTudatFormatter >( m,
+                                            "UTASTudatFormatter",
+                                            R"doc(
 
-Convenience class for loading and converting batch VLBI observations.
+Formatter/converter for UTAS data to Tudat format.
 
-Combines UTASObservationCollection and conversion to Tudat format for easy use.
-This is the recommended interface for loading UDL VLBI data.
-
-Example
--------
->>> from tudatpy.data.unified_data_library import BatchVLBI
->>> 
->>> # Load observations from JSON files
->>> vlbi = BatchVLBI(["/path/to/obs1.json", "/path/to/obs2.json"])
->>> 
->>> # Convert to Tudat observation collection (also creates ground stations)
->>> obs_collection = vlbi.to_tudat(bodies)
+Handles unit conversions and creates Tudat-compatible observation collections.
 
 )doc" )
-            .def( py::init< const std::vector< std::string >& >( ),
-                  py::arg( "file_paths" ),
+            .def( py::init<>( ),
                   R"doc(
 
-Construct from a list of JSON file paths.
-
-Parameters
-----------
-file_paths : list[str]
-    List of paths to JSON files containing VLBI observation data.
+Default constructor with UTAS default units (degrees, kilometers).
 
 )doc" )
             .def( "to_tudat",
-                  &tio::BatchVLBI::toTudat,
+                  &tio::UTASTudatFormatter::toTudat,
+                  py::arg( "collection" ),
                   py::arg( "bodies" ),
                   py::arg( "included_targets" ) = std::vector< std::string >( ),
                   py::arg( "station_body" ) = "Earth",
                   R"doc(
 
-Convert to Tudat observation collection.
+Convert UTAS observation collection to Tudat format.
 
 Creates ground stations on the specified body and returns observations
 in Tudat format for use with estimation.
 
 Parameters
 ----------
+collection : UTASObservationCollection
+    The observation collection to convert.
 bodies : SystemOfBodies
     System of bodies (will be modified to add ground stations).
 included_targets : list[str], optional
@@ -395,18 +381,6 @@ Returns
 -------
 ObservationCollection
     Tudat observation collection ready for use with estimation.
-
-)doc" )
-            .def( "get_collection", &tio::BatchVLBI::getCollection,
-                  py::return_value_policy::reference_internal,
-                  R"doc(
-
-Get the underlying observation collection.
-
-Returns
--------
-UTASObservationCollection
-    The raw observation collection.
 
 )doc" );
 }

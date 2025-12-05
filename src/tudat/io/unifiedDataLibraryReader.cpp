@@ -593,18 +593,18 @@ UTASTudatFormatter::toTudat( const UTASObservationCollection& collection,
 // BatchVLBI Implementation
 // ============================================================================
 
-BatchVLBI::BatchVLBI( const std::vector< std::string >& filePaths )
-    : collection_( filePaths ), formatter_( )
-{
-}
+// BatchVLBI::BatchVLBI( const std::vector< std::string >& filePaths )
+//     : collection_( filePaths ), formatter_( )
+// {
+// }
 
-std::shared_ptr< tom::ObservationCollection< double, Time > > 
-BatchVLBI::toTudat( simulation_setup::SystemOfBodies& bodies,
-                    const std::vector< std::string >& includedTargets,
-                    const std::string& stationBody )
-{
-    return formatter_.toTudat( collection_, bodies, includedTargets, stationBody );
-}
+// std::shared_ptr< tom::ObservationCollection< double, Time > > 
+// BatchVLBI::toTudat( simulation_setup::SystemOfBodies& bodies,
+//                     const std::vector< std::string >& includedTargets,
+//                     const std::string& stationBody )
+// {
+//     return formatter_.toTudat( collection_, bodies, includedTargets, stationBody );
+// }
 
 
 }  // namespace io

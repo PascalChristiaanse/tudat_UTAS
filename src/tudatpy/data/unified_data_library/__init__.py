@@ -32,6 +32,7 @@ Example
 """
 
 from tudatpy.kernel.data.unified_data_library import *
+from tudatpy.data.unified_data_library.BatchUDL import BatchVLBI
 
 __all__ = [
     "GeodeticPosition",
@@ -39,5 +40,6 @@ __all__ = [
     "UDLTimeSeries",
     "UTASObservationSet",
     "UTASObservationCollection",
+    "UTASTudatFormatter",
     "BatchVLBI",
 ]

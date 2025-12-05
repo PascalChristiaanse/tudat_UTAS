@@ -347,35 +347,35 @@ private:
  *
  * Combines UTASObservationCollection and UTASTudatFormatter for easy use.
  */
-class BatchVLBI
-{
-public:
-    /**
-     * @brief Construct from list of JSON file paths
-     */
-    explicit BatchVLBI( const std::vector< std::string >& filePaths );
+// class BatchVLBI
+// {
+// public:
+//     /**
+//      * @brief Construct from list of JSON file paths
+//      */
+//     explicit BatchVLBI( const std::vector< std::string >& filePaths );
 
-    /**
-     * @brief Convert to Tudat observation collection
-     *
-     * Creates ground stations and returns observations in Tudat format.
-     */
-    std::shared_ptr< tom::ObservationCollection< double, Time > > toTudat( simulation_setup::SystemOfBodies& bodies,
-                                                                           const std::vector< std::string >& includedTargets = { },
-                                                                           const std::string& stationBody = "Earth" );
+//     /**
+//      * @brief Convert to Tudat observation collection
+//      *
+//      * Creates ground stations and returns observations in Tudat format.
+//      */
+//     std::shared_ptr< tom::ObservationCollection< double, Time > > toTudat( simulation_setup::SystemOfBodies& bodies,
+//                                                                            const std::vector< std::string >& includedTargets = { },
+//                                                                            const std::string& stationBody = "Earth" );
 
-    /**
-     * @brief Get underlying observation collection
-     */
-    const UTASObservationCollection& getCollection( ) const
-    {
-        return collection_;
-    }
+//     /**
+//      * @brief Get underlying observation collection
+//      */
+//     const UTASObservationCollection& getCollection( ) const
+//     {
+//         return collection_;
+//     }
 
-private:
-    UTASObservationCollection collection_;
-    UTASTudatFormatter formatter_;
-};
+// private:
+//     UTASObservationCollection collection_;
+//     UTASTudatFormatter formatter_;
+// };
 
 }  // namespace io
 }  // namespace tudat

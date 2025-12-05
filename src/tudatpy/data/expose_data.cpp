@@ -25,6 +25,9 @@
 #include "tudat/io/readTrackingTxtFile.h"
 #include "tudat/io/readVariousPdsFiles.h"
 #include "tudat/io/solarActivityData.h"
+#include "tudat/io/unifiedDataLibraryReader.h"
+
+#include "unified_data_library/expose_unified_data_library_reader.h"
 
 namespace py = pybind11;
 namespace tio = tudat::input_output;
@@ -560,6 +563,11 @@ void expose_data( py::module& m )
            py::arg( "interpolator_settings" ) = tudat::interpolators::cubicSplineInterpolation( ),
            py::arg( "body_with_ground_stations_name" ) = "Earth",
            R"doc(No documentation available.)doc" );
+
+    // Create submodules and expose their bindings
+    auto unified_data_library_submodule =
+            m.def_submodule( "unified_data_library", "Submodule for reading and processing Unified Data Library (UDL) files." );
+    unified_data_library::expose_unified_data_library_reader( unified_data_library_submodule );
 };
 
 }  // namespace data

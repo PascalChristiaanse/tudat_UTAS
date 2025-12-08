@@ -63,7 +63,7 @@ inline double getDifferencedFrequencyOfArrivalScalingFactor(
         const std::shared_ptr< ObservationAncilliarySimulationSettings > ancillarySettings,
         const bool isFirstPartial )
 {
-    return ancillarySettings->getAncilliaryDoubleData( fdoa_transmitter_frequency, true ) / physical_constants::SPEED_OF_LIGHT;
+    return ancillarySettings->getAncilliaryDoubleData( transmitter_frequency, true ) / physical_constants::SPEED_OF_LIGHT;
 }
 
 //! Class for simulating one-way differenced range (e.g. closed-loop Doppler) observable

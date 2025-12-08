@@ -129,7 +129,7 @@ public:
             if( ancilliarySetingsInput != nullptr )
             {
                 ancilliarySetingsInput->setAncilliaryDoubleData( 
-                    fdoa_transmitter_frequency, 
+                    transmitter_frequency, 
                     static_cast< double >( transmitterFrequency ) );
             }
         }
@@ -148,7 +148,7 @@ public:
             try
             {
                 transmitterFrequency = static_cast< ObservationScalarType >(
-                    ancilliarySetingsInput->getAncilliaryDoubleData( fdoa_transmitter_frequency, true ) );
+                    ancilliarySetingsInput->getAncilliaryDoubleData( transmitter_frequency, true ) );
             }
             catch( const std::runtime_error& caughtException )
             {

@@ -39,7 +39,7 @@ enum ObservationAncilliarySimulationVariable {
     doppler_reference_frequency,
     sequential_range_lowest_ranging_component,
     range_conversion_factor,
-    fdoa_transmitter_frequency,
+    transmitter_frequency,
 };
 
 enum ObservationIntermediateSimulationVariable { transmitter_frequency_intermediate, received_frequency_intermediate };
@@ -59,7 +59,7 @@ public:
             case reception_reference_frequency_band:
             case sequential_range_lowest_ranging_component:
             case range_conversion_factor:
-            case fdoa_transmitter_frequency:
+            case transmitter_frequency:
                 doubleData_[ variableType ] = variable;
                 break;
             default:
@@ -98,7 +98,7 @@ public:
                 case reception_reference_frequency_band:
                 case sequential_range_lowest_ranging_component:
                 case range_conversion_factor:
-                case fdoa_transmitter_frequency:
+                case transmitter_frequency:
                     returnVariable = doubleData_.at( variableType );
                     break;
                 default:
@@ -188,7 +188,7 @@ public:
             case range_conversion_factor:
                 name = "DSN range conversion factor from RU to meter";
                 break;
-            case fdoa_transmitter_frequency:
+            case transmitter_frequency:
                 name = "FDOA transmitter frequency";
                 break;
             default:
@@ -374,7 +374,7 @@ inline std::shared_ptr< ObservationAncilliarySimulationSettings > getFdoaAncilli
     std::shared_ptr< ObservationAncilliarySimulationSettings > ancillarySettings =
             std::make_shared< ObservationAncilliarySimulationSettings >( );
 
-    ancillarySettings->setAncilliaryDoubleData( fdoa_transmitter_frequency, transmitterFrequency );
+    ancillarySettings->setAncilliaryDoubleData( transmitter_frequency, transmitterFrequency );
 
     return ancillarySettings;
 }

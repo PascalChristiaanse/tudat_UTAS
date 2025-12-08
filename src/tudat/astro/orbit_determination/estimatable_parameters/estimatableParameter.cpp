@@ -216,6 +216,9 @@ std::string getParameterTypeString( const EstimatebleParametersEnum parameterTyp
         case full_acceleration_scaling_factor:
             parameterDescription = "full acceleration scaling factor ";
             break;
+        case constant_transmitter_frequency:
+            parameterDescription = "constant transmitter frequency ";
+            break;
         default:
             std::string errorMessage =
                     "Error when getting parameter string, did not recognize parameter " + std::to_string( parameterType );

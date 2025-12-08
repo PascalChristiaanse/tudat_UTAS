@@ -431,6 +431,7 @@ bool isDoubleParameter( const EstimatebleParametersEnum parameterType )
             isDoubleParameter = true;
             break;
         case full_acceleration_scaling_factor:
+        case constant_transmitter_frequency:
             isDoubleParameter = true;
             break;
         default:

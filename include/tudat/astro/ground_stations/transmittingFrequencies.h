@@ -90,6 +90,18 @@ public:
     //! Destructor
     ~ConstantFrequencyInterpolator( ) { }
 
+    //! Get the constant frequency value
+    double getFrequency( ) const
+    {
+        return frequency_;
+    }
+
+    //! Set the constant frequency value
+    void setFrequency( const double frequency )
+    {
+        frequency_ = frequency;
+    }
+
     template< typename ObservationScalarType = double, typename TimeType = Time >
     ObservationScalarType computeCurrentFrequency( const TimeType lookupTime )
     {

@@ -34,7 +34,6 @@ using Vector6d = Eigen::Matrix< double, 6, 1 >;
 //! State history type (time -> state)
 using StateHistory = std::map< double, Vector6d >;
 
-
 // ============================================================================
 // CONSTANTS
 // ============================================================================
@@ -51,7 +50,6 @@ constexpr double JULIAN_DAY = 86400.0;
 //! Astronomical Unit in meters
 constexpr double ASTRONOMICAL_UNIT = 149597870700.0;
 
-
 // ============================================================================
 // EXCEPTIONS
 // ============================================================================
@@ -62,8 +60,7 @@ constexpr double ASTRONOMICAL_UNIT = 149597870700.0;
 class HorizonsException : public std::runtime_error
 {
 public:
-    explicit HorizonsException( const std::string& message )
-        : std::runtime_error( "Horizons Error: " + message ) {}
+    explicit HorizonsException( const std::string& message ): std::runtime_error( "Horizons Error: " + message ) {}
 };
 
 /**
@@ -72,8 +69,7 @@ public:
 class HorizonsNetworkException : public HorizonsException
 {
 public:
-    explicit HorizonsNetworkException( const std::string& message )
-        : HorizonsException( "Network error: " + message ) {}
+    explicit HorizonsNetworkException( const std::string& message ): HorizonsException( "Network error: " + message ) {}
 };
 
 /**
@@ -82,34 +78,31 @@ public:
 class HorizonsParseException : public HorizonsException
 {
 public:
-    explicit HorizonsParseException( const std::string& message )
-        : HorizonsException( "Parse error: " + message ) {}
+    explicit HorizonsParseException( const std::string& message ): HorizonsException( "Parse error: " + message ) {}
 };
 
-
 // ============================================================================
-// ENUMERATIONS
+// ENUMERATIONS AND TYPE DEFINITIONS
 // ============================================================================
 
 /**
- * @brief Reference frame orientation options
+ * @brief Reference frame orientation type (string-based)
  */
-enum class FrameOrientation
-{
-    J2000,          //!< Earth mean equator and equinox of J2000 (ICRF)
-    ECLIPJ2000      //!< Ecliptic and mean equinox of J2000
-};
+using FrameOrientation = std::string;
+
+//! Earth mean equator and equinox of J2000 (ICRF)
+inline const FrameOrientation FrameOrientation_J2000 = "J2000";
+//! Ecliptic and mean equinox of J2000
+inline const FrameOrientation FrameOrientation_ECLIPJ2000 = "ECLIPJ2000";
 
 /**
  * @brief Aberration correction options
  */
-enum class AberrationCorrection
-{
-    Geometric,      //!< No corrections (geometric positions)
-    LightTime,      //!< Light-time correction only
-    LightTimeStellar //!< Light-time and stellar aberration
+enum class AberrationCorrection {
+    Geometric,        //!< No corrections (geometric positions)
+    LightTime,        //!< Light-time correction only
+    LightTimeStellar  //!< Light-time and stellar aberration
 };
-
 
 // ============================================================================
 // HORIZONS QUERY CLASS
@@ -117,11 +110,11 @@ enum class AberrationCorrection
 
 /**
  * @brief Pure C++ interface to JPL Horizons System via REST API
- * 
+ *
  * This class provides access to JPL Horizons ephemeris data using HTTP requests.
  * It supports querying Cartesian state vectors for planets, moons, asteroids,
  * comets, and spacecraft.
- * 
+ *
  * Example usage:
  * @code
  * // Query Mars ephemeris from Solar System Barycenter
@@ -135,10 +128,10 @@ public:
     // ========================================================================
     // CONSTRUCTORS
     // ========================================================================
-    
+
     /**
      * @brief Construct a query with time range
-     * 
+     *
      * @param targetId JPL Horizons target identifier (e.g., "499" for Mars,
      *                 "-28" for JUICE, "Ceres" for asteroid Ceres)
      * @param location Coordinate center (e.g., "@0" for SSB, "500@399" for geocenter)
@@ -146,45 +139,41 @@ public:
      * @param endEpoch End time in seconds since J2000 TDB
      * @param stepSize Time step (e.g., "1d", "1h", "30m", or "10" for 10 steps)
      */
-    HorizonsQuery( 
-        const std::string& targetId,
-        const std::string& location,
-        double startEpoch,
-        double endEpoch,
-        const std::string& stepSize );
-    
+    HorizonsQuery( const std::string& targetId,
+                   const std::string& location,
+                   double startEpoch,
+                   double endEpoch,
+                   const std::string& stepSize );
+
     /**
      * @brief Construct a query with specific epoch list
-     * 
+     *
      * @param targetId JPL Horizons target identifier
      * @param location Coordinate center
      * @param epochs Vector of times in seconds since J2000 TDB
      */
-    HorizonsQuery(
-        const std::string& targetId,
-        const std::string& location,
-        const std::vector< double >& epochs );
-    
+    HorizonsQuery( const std::string& targetId, const std::string& location, const std::vector< double >& epochs );
+
     //! Destructor
     ~HorizonsQuery( );
-    
+
     // Disable copy (pimpl idiom)
     HorizonsQuery( const HorizonsQuery& ) = delete;
     HorizonsQuery& operator=( const HorizonsQuery& ) = delete;
-    
+
     // Enable move
     HorizonsQuery( HorizonsQuery&& ) noexcept;
     HorizonsQuery& operator=( HorizonsQuery&& ) noexcept;
-    
+
     // ========================================================================
     // QUERY METHODS
     // ========================================================================
-    
+
     /**
      * @brief Get Cartesian states from Horizons Vectors API
-     * 
+     *
      * Returns state vectors in SI units (meters, meters/second).
-     * 
+     *
      * @param frameOrientation Reference frame orientation
      * @param aberrationCorrection Type of aberration correction
      * @return StateHistory Map of epoch (seconds since J2000) to 6D state vector
@@ -192,32 +181,30 @@ public:
      * @throws HorizonsParseException on response parsing errors
      * @throws HorizonsException on API errors (e.g., unknown target)
      */
-    StateHistory getCartesianStates(
-        FrameOrientation frameOrientation = FrameOrientation::ECLIPJ2000,
-        AberrationCorrection aberrationCorrection = AberrationCorrection::Geometric ) const;
-    
+    StateHistory getCartesianStates( FrameOrientation frameOrientation = FrameOrientation_ECLIPJ2000,
+                                     AberrationCorrection aberrationCorrection = AberrationCorrection::Geometric ) const;
+
     /**
      * @brief Get Cartesian state history (alias for getCartesianStates)
-     * 
+     *
      * Convenience method matching Tudat naming conventions.
      */
-    StateHistory getCartesianStateHistory(
-        FrameOrientation frameOrientation = FrameOrientation::ECLIPJ2000,
-        AberrationCorrection aberrationCorrection = AberrationCorrection::Geometric ) const
+    StateHistory getCartesianStateHistory( FrameOrientation frameOrientation = FrameOrientation_ECLIPJ2000,
+                                           AberrationCorrection aberrationCorrection = AberrationCorrection::Geometric ) const
     {
         return getCartesianStates( frameOrientation, aberrationCorrection );
     }
-    
+
     // ========================================================================
     // PROPERTY ACCESSORS
     // ========================================================================
-    
+
     //! Get the target identifier
     std::string getTargetId( ) const;
-    
+
     //! Get the coordinate center
     std::string getLocation( ) const;
-    
+
     //! Get the target's full name (available after query)
     std::string getTargetFullName( ) const;
 
@@ -226,14 +213,13 @@ private:
     std::unique_ptr< Impl > pImpl_;
 };
 
-
 // ============================================================================
 // CONVENIENCE FUNCTIONS
 // ============================================================================
 
 /**
  * @brief Get Cartesian state history directly without creating HorizonsQuery object
- * 
+ *
  * @param targetId JPL Horizons target identifier
  * @param location Coordinate center
  * @param startEpoch Start time in seconds since J2000 TDB
@@ -242,39 +228,31 @@ private:
  * @param frameOrientation Reference frame orientation
  * @return StateHistory Map of epochs to state vectors
  */
-StateHistory getHorizonsCartesianStateHistory(
-    const std::string& targetId,
-    const std::string& location,
-    double startEpoch,
-    double endEpoch,
-    const std::string& stepSize,
-    FrameOrientation frameOrientation = FrameOrientation::ECLIPJ2000 );
+StateHistory getHorizonsCartesianStateHistory( const std::string& targetId,
+                                               const std::string& location,
+                                               double startEpoch,
+                                               double endEpoch,
+                                               const std::string& stepSize,
+                                               FrameOrientation frameOrientation = FrameOrientation_ECLIPJ2000 );
 
 /**
  * @brief Get Cartesian state history for specific epochs
- * 
+ *
  * @param targetId JPL Horizons target identifier
  * @param location Coordinate center
  * @param epochs Vector of times in seconds since J2000 TDB
  * @param frameOrientation Reference frame orientation
  * @return StateHistory Map of epochs to state vectors
  */
-StateHistory getHorizonsCartesianStateHistory(
-    const std::string& targetId,
-    const std::string& location,
-    const std::vector< double >& epochs,
-    FrameOrientation frameOrientation = FrameOrientation::ECLIPJ2000 );
-
-/**
- * @brief Convert frame orientation enum to string
- */
-std::string frameOrientationToString( FrameOrientation orientation );
+StateHistory getHorizonsCartesianStateHistory( const std::string& targetId,
+                                               const std::string& location,
+                                               const std::vector< double >& epochs,
+                                               FrameOrientation frameOrientation = FrameOrientation_ECLIPJ2000 );
 
 /**
  * @brief Convert aberration correction enum to string
  */
 std::string aberrationCorrectionToString( AberrationCorrection correction );
-
 
 // ============================================================================
 // TIME CONVERSION UTILITIES
@@ -317,4 +295,4 @@ double isoDateToSeconds( const std::string& isoDate );
 }  // namespace horizons_interface
 }  // namespace tudat
 
-#endif // TUDAT_HORIZONS_INTERFACE_H
+#endif  // TUDAT_HORIZONS_INTERFACE_H

@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <cmath>
 #include <limits>
+#include <algorithm>
 
 #include "tudat/interface/horizons.h"
 #include "tudat/astro/basic_astro.h"
@@ -30,31 +31,14 @@ using namespace tudat::simulation_setup;
 using namespace tudat::propagators;
 using namespace tudat::numerical_integrators;
 using namespace tudat::observation_models;
+using namespace tudat::earth_orientation;
 using namespace tudat::io;
 
-int main( )
+std::vector< double > generateObservationTimesFromUDL( const io::UTASObservationCollection& udlCollection )
 {
-    std::cout << "=== targetSpacecraft TDOA/FDOA Observation Simulation ===" << std::endl;
+    std::set< double > observationTimesSet;
 
-    // =========================================================================
-    // Load UDL observations to get ground station definitions
-    // =========================================================================
-    std::vector< std::string > udlFiles = {
-    "/home/pascal/Documents/lunar-od/data/processed/Capstone/CAPSTONE_TDOA-FDOA_ke_cd_2025-10-11T164116.v6.json",
-    "/home/pascal/Documents/lunar-od/data/processed/Capstone/CAPSTONE_TDOA-FDOA_yg_cd_2025-10-11T164116.v6.json",
-    "/home/pascal/Documents/lunar-od/data/processed/Capstone/CAPSTONE_TDOA-FDOA_yg_ke_2025-10-11T164116.v6.json",
-    };
-    auto UDL = io::BatchVLBI( udlFiles );
-
-    // =========================================================================
-    // Grab targetSpacecraft spacecraft ephemeris from JPL Horizons
-    // =========================================================================
-
-    // Get time range from UDL observation data (find min/max across all observation sets)
-    double minEpoch = std::numeric_limits< double >::max( );
-    double maxEpoch = std::numeric_limits< double >::lowest( );
-
-    const auto& allObs = UDL.getCollection( ).getAllObservations( );
+    const auto& allObs = udlCollection.getAllObservations( );
     for( const auto& [ targetId, stationPairMap ] : allObs )
     {
         for( const auto& [ stationPair, obsSets ] : stationPairMap )
@@ -62,29 +46,95 @@ int main( )
             for( const auto& obsSet : obsSets )
             {
                 const auto& timeSeries = obsSet->getTimeSeries( );
-                if( !timeSeries.epochs.empty( ) )
-                {
-                    minEpoch = std::min( minEpoch, timeSeries.epochs.front( ) );
-                    maxEpoch = std::max( maxEpoch, timeSeries.epochs.back( ) );
-                }
+                observationTimesSet.insert( timeSeries.epochs.begin( ), timeSeries.epochs.end( ) );
             }
         }
     }
 
-    double startEpoch = minEpoch - 600.0;  // Start time from UDL data - 10 min buffer
-    double endEpoch = maxEpoch + 600.0;    // End time from UDL data + 10 min buffer
-    std::string stepSize = "1m";           // 1 minute intervals for ephemeris
+    return std::vector< double >( observationTimesSet.begin( ), observationTimesSet.end( ) );
+}
 
-    std::cout << "Fetching targetSpacecraft ephemeris from JPL Horizons..." << std::endl;
-    HorizonsQuery targetSpacecraftEph( "CAPSTONE", "500", startEpoch - 600, endEpoch + 600, stepSize );
-    StateHistory targetSpacecraftStates = targetSpacecraftEph.getCartesianStates( FrameOrientation::J2000 );
-    Vector6d targetSpacecraftInitialState = targetSpacecraftStates.begin( )->second;
+std::vector< Time > generateObservationTimesFromPresetDateStrings(
+        double timestep,
+        const std::string& startDateString,
+        const std::string& endDateString,
+        std::shared_ptr< TerrestrialTimeScaleConverter > timeConverter = std::make_shared< TerrestrialTimeScaleConverter >( ) )
+{
+    // Convert start and end date strings UTC to seconds since J2000 TDB
+    Time startTimeUTC = tba::timeFromIsoString< tudat::Time >( startDateString );
+    Time endTimeUTC = tba::timeFromIsoString< tudat::Time >( endDateString );
 
-    std::cout << "targetSpacecraft initial state (ECI):" << std::endl;
-    std::cout << "  Position (km): [" << targetSpacecraftInitialState( 0 ) / 1e3 << ", " << targetSpacecraftInitialState( 1 ) / 1e3 << ", "
-              << targetSpacecraftInitialState( 2 ) / 1e3 << "]" << std::endl;
-    std::cout << "  Velocity (km/s): [" << targetSpacecraftInitialState( 3 ) / 1e3 << ", " << targetSpacecraftInitialState( 4 ) / 1e3
-              << ", " << targetSpacecraftInitialState( 5 ) / 1e3 << "]" << std::endl;
+    // Convert UTC to TDB using time scale converter
+    // Use a dummy position @ TODO improve with actual station position
+    Eigen::Vector3d dummyPosition( 6378.0e3, 0.0, 0.0 );
+    Time startTimeTDB =
+            timeConverter->getCurrentTime< Time >( tba::TimeScales::utc_scale, tba::TimeScales::tdb_scale, startTimeUTC, dummyPosition );
+    Time endTimeTDB =
+            timeConverter->getCurrentTime< Time >( tba::TimeScales::utc_scale, tba::TimeScales::tdb_scale, endTimeUTC, dummyPosition );
+
+    // set maximum precision for output
+    std::cout << std::setprecision( std::numeric_limits< double >::digits10 + 2 );
+    std::cout << "Start Julian Day: " << julianDayFromTime< double >( startTimeTDB ) << " TDB" << std::endl;
+    std::cout << "End   Julian Day: " << julianDayFromTime< double >( endTimeTDB ) << " TDB" << std::endl;
+    std::string isoStart = horizons_interface::secondsToIsoDate( static_cast< double >( startTimeTDB ) );
+    std::string isoEnd = horizons_interface::secondsToIsoDate( static_cast< double >( endTimeTDB ) );
+    std::cout << "Start ISO Date: " << isoStart << " TDB" << std::endl;
+    std::cout << "End   ISO Date: " << isoEnd << " TDB" << std::endl;
+    int size =
+            static_cast< int >( std::ceil( ( static_cast< double >( endTimeTDB ) - static_cast< double >( startTimeTDB ) ) / timestep ) ) +
+            1;
+    std::vector< Time > observationTimes( size );
+    for( int i = 0; i < size; ++i )
+    {
+        observationTimes[ i ] = startTimeTDB + i * timestep;
+    }
+    return observationTimes;
+}
+
+int main( )
+{
+    std::cout << "=== targetSpacecraft TDOA/FDOA Observation Simulation ===" << std::endl;
+
+    std::string outputDirectory = "/home/pascal/Documents/lunar-od/results/final_dataset-10dec/";
+    std::string hdf5Filename = "capstone_no_de-bias_GCRS.h5";
+    std::string xdmfFilename = "capstone_no_de-bias_GCRS.xdmf";
+
+    std::string globalFrameOrientation = std::string( "ECLIPJ2000" );
+    std::string globalFrameOrigin = std::string( "SSB" );
+
+    // =========================================================================
+    // Load UDL observations to get ground station definitions
+    // =========================================================================
+    
+    
+    
+    std::vector< std::string > udlFiles = {
+        "/home/pascal/Documents/lunar-od/data/processed/Capstone/CAPSTONE_TDOA-FDOA_ke_cd_2025-10-11T164121.v19.json",
+        "/home/pascal/Documents/lunar-od/data/processed/Capstone/CAPSTONE_TDOA-FDOA_yg_cd_2025-10-11T164121.v19.json",
+        "/home/pascal/Documents/lunar-od/data/processed/Capstone/CAPSTONE_TDOA-FDOA_yg_ke_2025-10-11T164121.v19.json",
+    };
+    auto UDL = io::BatchVLBI( udlFiles );
+
+    // =========================================================================
+    // Grab targetSpacecraft spacecraft ephemeris from JPL Horizons
+    // =========================================================================
+    // std::vector< double > observationTimes = generateObservationTimesFromUDL( UDL.getCollection( ) );
+    std::vector< Time > observationTimesTime =
+            generateObservationTimesFromPresetDateStrings( 1.0, "2025-10-11T16:41:21.772479857", "2025-10-11T17:00:10.772479857" );
+
+    // Convert Time vector to double vector for observation simulation settings
+    std::vector< double > observationTimes( observationTimesTime.size( ) );
+    std::transform( observationTimesTime.begin( ), observationTimesTime.end( ), observationTimes.begin( ),
+                    []( const Time& t ) { return static_cast< double >( t ); } );
+
+    Time startEpochPadded =
+            *std::min_element( observationTimesTime.begin( ), observationTimesTime.end( ) ) - 600.0;  // Start time from UDL data - 10 min buffer
+    Time endEpochPadded =
+            *std::max_element( observationTimesTime.begin( ), observationTimesTime.end( ) ) + 600.0;  // End time from UDL data + 10 min buffer
+    std::string stepSize = "1m";                                                              // 1 minute intervals for ephemeris
+
+    auto targetSpacecraftStates = HorizonsQuery( "CAPSTONE", "@SSB", startEpochPadded, endEpochPadded, stepSize )
+                                          .getCartesianStateHistory( globalFrameOrientation );
 
     // =========================================================================
     // Set up simulation environment: Earth, Moon, targetSpacecraft
@@ -94,30 +144,32 @@ int main( )
     spice_interface::loadStandardSpiceKernels( );
 
     std::vector< std::string > bodiesToCreate = { "Earth", "Moon" };
-    BodyListSettings bodySettings = getDefaultBodySettings( bodiesToCreate, "Earth", "J2000" );
+    BodyListSettings bodySettings = getDefaultBodySettings( bodiesToCreate, globalFrameOrigin, globalFrameOrientation );
+
+    bodySettings.get( "Earth" )->rotationModelSettings =
+            gcrsToItrsRotationModelSettings( tudat::basic_astrodynamics::iau_2006, globalFrameOrientation, nullptr, nullptr, nullptr );
+    bodySettings.get( "Earth" )->shapeModelSettings = simulation_setup::fromSpiceOblateSphericalBodyShapeSettings( );
+
     SystemOfBodies bodies = createSystemOfBodies< double, double >( bodySettings );
 
     // Create ground stations from UDL data
     auto udlObservations = UDL.toTudat( bodies, { }, "Earth" );
 
-    // Print ground station Cartesian positions
-    std::cout << "\nGround station Cartesian positions (ECEF, meters):" << std::endl;
-    auto groundStationMap = bodies.at( "Earth" )->getGroundStationMap( );
-    for( const auto& [ stationName, groundStation ] : groundStationMap )
-    {
-        Eigen::Vector3d cartesianPosition = groundStation->getNominalStationState( )->getNominalCartesianPosition( );
-        std::cout << "  " << stationName << ": [" << std::fixed << std::setprecision( 3 ) << cartesianPosition( 0 ) << ", "
-                  << cartesianPosition( 1 ) << ", " << cartesianPosition( 2 ) << "]" << std::endl;
-    }
-
     // Create targetSpacecraft body with tabulated ephemeris from Horizons
     auto capstoneName = *UDL.getCollection( ).getObservedTargets( ).begin( );
     std::cout << "Capstone is known as target ID: " << capstoneName << " in UDL data." << std::endl;
+
     bodies.createEmptyBody( capstoneName );
-    bodies.at( capstoneName )->setConstantBodyMass( 25.0 );  // Approximate mass of Capstone
-    auto ephSet = std::make_shared< TabulatedEphemerisSettings >( targetSpacecraftStates, "Earth", "J2000" );
+    auto ephSet = std::make_shared< TabulatedEphemerisSettings >( targetSpacecraftStates, globalFrameOrigin, globalFrameOrientation );
     auto eph = createBodyEphemeris< double, double >( ephSet, capstoneName );
     bodies.at( capstoneName )->setEphemeris( eph );
+
+    // X-band transmitter frequency for FDOA
+    double transmitterFrequency = 8465000000;  // X-band
+    bodies.getBody( capstoneName )
+            ->getVehicleSystems( )
+            ->setTransmittedFrequencyCalculator(
+                    std::make_shared< ground_stations::ConstantFrequencyInterpolator >( transmitterFrequency ) );
 
     std::cout << "Created simulation environment with Earth, Moon, and Capstone." << std::endl;
 
@@ -140,19 +192,6 @@ int main( )
     std::vector< std::shared_ptr< ObservationModelSettings > > observationModelSettings;
     std::vector< std::shared_ptr< ObservationSimulationSettings< double > > > observationSimulationSettings;
 
-    // Define observation times
-    std::vector< double > observationTimes;
-    double obsInterval = 1.0;  // 1 second interval
-    for( double t = startEpoch + obsInterval; t <= endEpoch - obsInterval; t += obsInterval )
-    {
-        observationTimes.push_back( t );
-    }
-    std::cout << "\nSimulating " << observationTimes.size( ) << " observation epochs over " << ( endEpoch - startEpoch ) / 86400.0
-              << " days." << std::endl;
-
-    // X-band transmitter frequency for FDOA
-    double transmitterFrequency = 2.2093339688e+09;  // S-band
-
     // Create observation model settings for each link definition
     for( const auto& [ obsType, linkDefs ] : linkDefsPerObservable )
     {
@@ -173,18 +212,16 @@ int main( )
                         differenced_time_of_arrival, linkEnds, observationTimes, receiver );
                 observationSimulationSettings.push_back( tdoaSimSettings );
             }
-            else if( obsType == differenced_frequency_of_arrival )
+            if (obsType == differenced_frequency_of_arrival )
             {
                 // FDOA observation model
                 auto fdoaModelSettings = std::make_shared< DifferencedFrequencyOfArrivalObservationSettings >(
                         linkEnds, std::vector< std::shared_ptr< LightTimeCorrectionSettings > >( ) );
                 observationModelSettings.push_back( fdoaModelSettings );
 
-                // FDOA simulation settings with ancillary data
+                // FDOA simulation settings
                 auto fdoaSimSettings = std::make_shared< TabulatedObservationSimulationSettings< double > >(
                         differenced_frequency_of_arrival, linkEnds, observationTimes, receiver );
-                auto fdoaAncillarySettings = getFdoaAncilliarySettings( transmitterFrequency );
-                fdoaSimSettings->setAncilliarySettings( fdoaAncillarySettings );
                 observationSimulationSettings.push_back( fdoaSimSettings );
             }
         }
@@ -214,6 +251,11 @@ int main( )
     {
         for( const auto& linkDef : linkDefs )
         {
+            if( obsType == differenced_frequency_of_arrival )
+            {
+                // std::cout << "\nNote: FDOA observations are not yet implemented in this example." << std::endl;
+                continue;
+            }
             auto obsSets = observationCollection->getSingleLinkAndTypeObservationSets( obsType, linkDef );
 
             if( !obsSets.empty( ) )
@@ -226,13 +268,15 @@ int main( )
                 {
                     if( obsType == differenced_time_of_arrival )
                     {
-                        std::cout << "  Time: " << std::fixed << std::setprecision( 1 ) << obs.first
+                        auto timeJD = julianDayFromTime< double >( obs.first );
+                        std::cout << "  Time: " << std::fixed << std::setprecision( 9 ) << timeJD << " TDB" << obs.first << " s,"
                                   << " s, TDOA: " << std::setprecision( 12 ) << obs.second( 0 ) * 1e9 << " ns" << std::endl;
                     }
                     else if( obsType == differenced_frequency_of_arrival )
                     {
-                        std::cout << "  Time: " << std::fixed << std::setprecision( 1 ) << obs.first
-                                  << " s, FDOA: " << std::setprecision( 6 ) << obs.second( 0 ) << " Hz" << std::endl;
+                        auto timeJD = julianDayFromTime< double >( obs.first );
+                        std::cout << "  Time: " << std::fixed << std::setprecision( 9 ) << timeJD << " TDB" << obs.first << " s,"
+                                  << " s, FDOA: " << std::setprecision( 12 ) << obs.second( 0 ) * 1e9 << " ns" << std::endl;
                     }
                     if( ++count >= 3 ) break;
                 }
@@ -241,24 +285,8 @@ int main( )
     }
 
     // =========================================================================
-    // Set observation weights
-    // =========================================================================
-
-    // TDOA noise: ~1 nanosecond precision
-    observationCollection->setConstantWeight( 1.0 / ( 1.0e-9 * 1.0e-9 ), observationParser( differenced_time_of_arrival ) );
-
-    // FDOA noise: ~1 mHz precision
-    observationCollection->setConstantWeight( 1.0 / ( 1.0e-3 * 1.0e-3 ), observationParser( differenced_frequency_of_arrival ) );
-
-    std::cout << "\nWeights set for observations." << std::endl;
-
-    // =========================================================================
     // Export to HDF5
     // =========================================================================
-
-    std::string outputDirectory = "/home/pascal/Documents/lunar-od/tudatpy/output/";
-    std::string hdf5Filename = "capstone_no_corrections.h5";
-    std::string xdmfFilename = "capstone_no_corrections.xdmf";
 
     std::string hdf5Path = outputDirectory + hdf5Filename;
     std::string xdmfPath = outputDirectory + xdmfFilename;
@@ -270,15 +298,6 @@ int main( )
 
     // Add the complete observation collection
     hdf5File.addObservationCollection( observationCollection, "capstone_vlbi_observations", "/Observations/ObservationCollections", false );
-
-    // Also add individual observation sets for easy access
-    auto singleObsSets = observationCollection->getSingleObservationSets( );
-    int setCounter = 0;
-    for( const auto& obsSet : singleObsSets )
-    {
-        std::string setName = "set_" + std::to_string( setCounter++ );
-        hdf5File.addSingleObservationSet( obsSet, setName, "/Observations/IndividualSets" );
-    }
 
     // Generate XDMF descriptor file for ParaView visualization
     std::cout << "Generating XDMF descriptor: " << xdmfPath << std::endl;
@@ -298,15 +317,10 @@ int main( )
     std::cout << "\nHDF5 file structure:" << std::endl;
     std::cout << "/Observations/" << std::endl;
     std::cout << "  /ObservationCollections/" << std::endl;
-    std::cout << "    /danuri_vlbi_observations/" << std::endl;
+    std::cout << "    /$target$_vlbi_observations/" << std::endl;
     std::cout << "      /metadata/              - Observable types, time bounds, link end IDs" << std::endl;
     std::cout << "      /concatenated/          - All observations in single arrays" << std::endl;
     std::cout << "      /by_observable_type/    - Organized by type -> link ends -> sets" << std::endl;
-    std::cout << "  /IndividualSets/" << std::endl;
-    for( int i = 0; i < setCounter; i++ )
-    {
-        std::cout << "    /set_" << i << "/" << std::endl;
-    }
 
     std::cout << "\nYou can inspect the files with:" << std::endl;
     std::cout << "  h5dump -H " << hdf5Path << std::endl;

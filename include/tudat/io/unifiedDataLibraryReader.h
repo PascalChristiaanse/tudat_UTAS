@@ -59,7 +59,7 @@ struct GeodeticPosition {
     double altitude;   // Length unit depends on supplier format
 
     GeodeticPosition( ): longitude( 0.0 ), latitude( 0.0 ), altitude( 0.0 ) {}
-    GeodeticPosition( double lon, double lat, double alt ): longitude( lon ), latitude( lat ), altitude( alt ) {}
+    GeodeticPosition( double alt, double lat, double lon ): longitude( lon ), latitude( lat ), altitude( alt ) {}
 
     bool isZero( ) const
     {
@@ -68,7 +68,7 @@ struct GeodeticPosition {
 
     Eigen::Vector3d toEigenVector( ) const
     {
-        return Eigen::Vector3d( longitude, latitude, altitude );
+        return Eigen::Vector3d( altitude, latitude, longitude );
     }
 };
 
@@ -334,7 +334,7 @@ public:
     std::shared_ptr< tom::ObservationCollection< double, Time > > toTudat( const UTASObservationCollection& collection,
                                                                            simulation_setup::SystemOfBodies& bodies,
                                                                            const std::vector< std::string >& includedTargets = { },
-                                                                           const std::string& stationBody = "Earth" );
+                                                                           const std::string& stationBodyName = "Earth" );
 
 private:
     /**
@@ -355,35 +355,32 @@ private:
  *
  * Combines UTASObservationCollection and UTASTudatFormatter for easy use.
  */
-// class BatchVLBI
-// {
-// public:
-//     /**
-//      * @brief Construct from list of JSON file paths
-//      */
-//     explicit BatchVLBI( const std::vector< std::string >& filePaths );
-
-//     /**
-//      * @brief Convert to Tudat observation collection
-//      *
-//      * Creates ground stations and returns observations in Tudat format.
-//      */
-//     std::shared_ptr< tom::ObservationCollection< double, Time > > toTudat( simulation_setup::SystemOfBodies& bodies,
-//                                                                            const std::vector< std::string >& includedTargets = { },
-//                                                                            const std::string& stationBody = "Earth" );
-
-//     /**
-//      * @brief Get underlying observation collection
-//      */
-//     const UTASObservationCollection& getCollection( ) const
-//     {
-//         return collection_;
-//     }
-
-// private:
-//     UTASObservationCollection collection_;
-//     UTASTudatFormatter formatter_;
-// };
+class BatchVLBI
+{
+public:
+    /**
+     * @brief Construct from list of JSON file paths
+     */
+    explicit BatchVLBI( const std::vector< std::string >& filePaths );
+    /**
+     * @brief Convert to Tudat observation collection
+     *
+     * Creates ground stations and returns observations in Tudat format.
+     */
+    std::shared_ptr< tom::ObservationCollection< double, Time > > toTudat( simulation_setup::SystemOfBodies& bodies,
+                                                                        const std::vector< std::string >& includedTargets = { },
+                                                                        const std::string& stationBody = "Earth" );
+    /**
+     * @brief Get underlying observation collection
+     */
+    const UTASObservationCollection& getCollection( ) const
+    {
+        return collection_;
+    }
+private:
+    UTASObservationCollection collection_;
+    UTASTudatFormatter formatter_;
+};
 
 }  // namespace io
 }  // namespace tudat

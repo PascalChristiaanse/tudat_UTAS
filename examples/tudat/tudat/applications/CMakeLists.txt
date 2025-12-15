@@ -7,16 +7,6 @@
 #    a copy of the license with this file. If not, please or visit:
 #    http://tudat.tudelft.nl/LICENSE.
 
-# Build kplo_vlbi_estimation application
-
-find_package(nlohmann_json 3.2.0 REQUIRED)
-
-TUDAT_ADD_EXECUTABLE(kplo_vlbi_estimation
-        "kplo_vlbi_estimation.cpp"
-        ${Tudat_ESTIMATION_LIBRARIES}
-        )
-target_link_libraries(kplo_vlbi_estimation PUBLIC ${Tudat_ESTIMATION_LIBRARIES})
-
 # Build horizons_example application (demonstrates pure C++ Horizons interface)
 find_package(CURL REQUIRED)
 TUDAT_ADD_EXECUTABLE(horizons_example
@@ -31,15 +21,6 @@ target_link_libraries(horizons_example
 # Build hdf5SingleProcess example application
 find_package(HighFive CONFIG REQUIRED)
 find_package(HDF5 REQUIRED COMPONENTS CXX)
-
-TUDAT_ADD_EXECUTABLE(hdf5SingleProcess
-        "hdf5SingleProcess.cpp"
-        ${Tudat_ESTIMATION_LIBRARIES}
-        )
-target_link_libraries(hdf5SingleProcess 
-        PUBLIC ${Tudat_ESTIMATION_LIBRARIES}
-        PRIVATE HighFive HDF5::HDF5
-        )
 
 # Build hdf5_orbit_example - demonstrates HDF5 output for orbit propagation
 TUDAT_ADD_EXECUTABLE(hdf5_orbit_example

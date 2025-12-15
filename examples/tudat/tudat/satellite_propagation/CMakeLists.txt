@@ -28,7 +28,12 @@
 #        ${Tudat_PROPAGATION_LIBRARIES}
 #        )
 
-TUDAT_ADD_EXECUTABLE(application_EarthOrbiterBasicStateEstimation
-        "earthOrbiterBasicStateEstimation.cpp"
-        ${Tudat_ESTIMATION_LIBRARIES}
-        )
+# TUDAT_ADD_EXECUTABLE(application_EarthOrbiterBasicStateEstimation
+#         "earthOrbiterBasicStateEstimation.cpp"
+#         ${Tudat_ESTIMATION_LIBRARIES}
+#         )
+
+# TUDAT_ADD_EXECUTABLE(earthOrbiterStateEstimation
+#         "earthOrbiterStateEstimation.cpp"
+#         ${Tudat_ESTIMATION_LIBRARIES}
+#         )

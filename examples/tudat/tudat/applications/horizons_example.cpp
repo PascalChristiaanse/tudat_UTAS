@@ -48,7 +48,7 @@ int main( )
         
         // Get Cartesian states as map of epoch -> state vector
         StateHistory marsStates = marsQuery.getCartesianStates( 
-            FrameOrientation::J2000, 
+            FrameOrientation_J2000, 
             AberrationCorrection::Geometric );
         
         std::cout << "Target: " << marsQuery.getTargetFullName( ) << std::endl;
@@ -106,7 +106,7 @@ int main( )
         // Query Moon (ID: 301) from Earth center (500@399)
         HorizonsQuery moonQuery( "301", "500@399", epochList );
         
-        StateHistory moonStates = moonQuery.getCartesianStates( FrameOrientation::J2000 );
+        StateHistory moonStates = moonQuery.getCartesianStates( FrameOrientation_J2000 );
         
         std::cout << "Target: " << moonQuery.getTargetFullName( ) << std::endl;
         std::cout << "Retrieved " << moonStates.size( ) << " state vectors for Moon." << std::endl;
@@ -148,7 +148,7 @@ int main( )
             0.0,        // Start: J2000
             30 * 86400, // End: J2000 + 30 days
             "5d",       // 5-day step
-            FrameOrientation::ECLIPJ2000
+            FrameOrientation_ECLIPJ2000
         );
         
         std::cout << "Got " << venusHistory.size( ) << " states for Venus." << std::endl;

@@ -123,15 +123,7 @@ void expose_ancillary_settings( py::module& m )
                     :attr:`~tudatpy.estimation.observations_setup.ancillary_settings.ObservationAncilliarySimulationSettings.get_float_settings` and
                     :attr:`~tudatpy.estimation.observations_setup.ancillary_settings.ObservationAncilliarySimulationSettings.set_float_settings`
                     )doc" )
-            .value( "transmitter_frequency",
-                    tom::ObservationAncilliarySimulationVariable::transmitter_frequency,
-                    R"doc(
-                    Transmitter frequency for Frequency Difference of Arrival (FDOA) observations.
-                    This is the carrier frequency of the signal transmitted by the spacecraft.
-                    This ancillary setting is retrieved and set using the
-                    :attr:`~tudatpy.estimation.observations_setup.ancillary_settings.ObservationAncilliarySimulationSettings.get_float_settings` and
-                    :attr:`~tudatpy.estimation.observations_setup.ancillary_settings.ObservationAncilliarySimulationSettings.set_float_settings`
-                    )doc" )
+            
             .export_values( );
 
     py::class_< tom::ObservationAncilliarySimulationSettings, std::shared_ptr< tom::ObservationAncilliarySimulationSettings > >(

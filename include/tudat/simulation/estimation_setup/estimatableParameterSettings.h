@@ -1703,11 +1703,6 @@ inline std::shared_ptr< EstimatableParameterSettings > iauRotationModelPoleLibra
     return std::make_shared< PoleLibrationTermsParameterSettings >( bodyName, librationAngularFrequencies );
 }
 
-inline std::shared_ptr< EstimatableParameterSettings > constantTransmitterFrequency( const std::string& bodyName )
-{
-    return std::make_shared< EstimatableParameterSettings >( bodyName, constant_transmitter_frequency );
-}
-
 }  // namespace estimatable_parameters
 
 }  // namespace tudat

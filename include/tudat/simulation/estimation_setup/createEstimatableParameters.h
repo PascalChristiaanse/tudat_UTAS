@@ -49,7 +49,6 @@
 #include "tudat/astro/orbit_determination/estimatable_parameters/gravityFieldVariationParameters.h"
 #include "tudat/astro/orbit_determination/estimatable_parameters/iauRotationModelParameters.h"
 #include "tudat/astro/orbit_determination/estimatable_parameters/rtgForceVector.h"
-#include "tudat/astro/orbit_determination/estimatable_parameters/constantTransmitterFrequency.h"
 #include "tudat/astro/relativity/metric.h"
 #include "tudat/simulation/estimation_setup/estimatableParameterSettings.h"
 #include "tudat/simulation/propagation_setup/dynamicsSimulator.h"
@@ -1630,35 +1629,7 @@ std::shared_ptr< estimatable_parameters::EstimatableParameter< double > > create
                 }
                 break;
             }
-            case constant_transmitter_frequency: {
-                if( currentBody->getVehicleSystems( ) == nullptr )
-                {
-                    std::string errorMessage = "Error, body " + currentBodyName +
-                            " has no vehicle systems, cannot estimate constant transmitter frequency.";
-                    throw std::runtime_error( errorMessage );
-                }
-                else if( currentBody->getVehicleSystems( )->getTransmittedFrequencyCalculator( ) == nullptr )
-                {
-                    std::string errorMessage = "Error, body " + currentBodyName +
-                            " has no transmitted frequency calculator, cannot estimate constant transmitter frequency.";
-                    throw std::runtime_error( errorMessage );
-                }
-                else
-                {
-                    std::shared_ptr< ground_stations::ConstantFrequencyInterpolator > constantFrequencyInterpolator =
-                            std::dynamic_pointer_cast< ground_stations::ConstantFrequencyInterpolator >(
-                                    currentBody->getVehicleSystems( )->getTransmittedFrequencyCalculator( ) );
-                    if( constantFrequencyInterpolator == nullptr )
-                    {
-                        std::string errorMessage = "Error, body " + currentBodyName +
-                                " does not have a ConstantFrequencyInterpolator, cannot estimate constant transmitter frequency.";
-                        throw std::runtime_error( errorMessage );
-                    }
-                    doubleParameterToEstimate = std::make_shared< ConstantTransmitterFrequencyParameter >(
-                            constantFrequencyInterpolator, currentBodyName );
-                }
-                break;
-            }
+            
             default:
                 throw std::runtime_error( "Warning, this double parameter has not yet been implemented when making parameters" );
                 break;

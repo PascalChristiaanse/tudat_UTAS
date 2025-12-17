@@ -98,7 +98,6 @@ void expose_parameters_setup( py::module& m )
             .value( "iau_pole_position_rate_type", tep::EstimatebleParametersEnum::rotation_pole_position_rate )
             .value( "iau_pole_libration_type", tep::EstimatebleParametersEnum::rotation_pole_libration_terms )
             .value( "iau_longitudinal_libration_type", tep::EstimatebleParametersEnum::rotation_longitudinal_libration_terms )
-            .value( "constant_transmitter_frequency_type", tep::EstimatebleParametersEnum::constant_transmitter_frequency )
 
             .export_values( );
 
@@ -1070,32 +1069,6 @@ The identifier is represented by a tuple of the form ``(parameter_type, (body_na
  -------
  :class:`~tudatpy.dynamics.parameters_setup.EstimatableParameterSettings`
      :class:`~tudatpy.dynamics.parameters_setup.EstimatableParameterSettings` object for the specified body's constant spin rate.
-
-     )doc" );
-
-    m.def( "constant_transmitter_frequency",
-           &tep::constantTransmitterFrequency,
-           py::arg( "body" ),
-           R"doc(
-
- Function for creating parameter settings for a body's constant transmitter frequency.
-
- Function for creating parameter settings object for a body's constant transmitter frequency parameter.
- Using the constant transmitter frequency as estimatable parameter requires:
-
- * A ConstantFrequencyInterpolator set on the body's VehicleSystems
- * A differenced_frequency_of_arrival (FDOA) observation model depending on this transmitter
-
-
- Parameters
- ----------
- body : str
-     Name of the body, with whose transmitter frequency the estimatable parameter is associated.
-
- Returns
- -------
- :class:`~tudatpy.dynamics.parameters_setup.EstimatableParameterSettings`
-     :class:`~tudatpy.dynamics.parameters_setup.EstimatableParameterSettings` object for the specified body's constant transmitter frequency.
 
      )doc" );
 

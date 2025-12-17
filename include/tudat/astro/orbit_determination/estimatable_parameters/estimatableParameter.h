@@ -99,7 +99,6 @@ enum EstimatebleParametersEnum {
     rtg_force_vector_magnitude,
     area_to_mass_scaling_factor,
     full_acceleration_scaling_factor,
-    constant_transmitter_frequency
 };
 
 std::string getParameterTypeString( const EstimatebleParametersEnum parameterType );

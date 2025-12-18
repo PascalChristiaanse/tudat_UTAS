@@ -1,0 +1,52 @@
+{
+    "observation_types": ["Range"],
+    "simulate_observations": true,
+    
+    "frame": {
+        "origin": "Moon",
+        "orientation": "ECLIPJ2000"
+    },
+    
+    "target": {
+        "name": "CAPSTONE",
+        "display_name": "CAPSTONE",
+        "mass": 25.0
+    },
+    
+    "time": {
+        "start_date": "2025-10-11T16:41:21.772479857",
+        "end_date": "2025-10-12T17:00:10.772479857",
+        "timestep": 1.0,
+        "ephemeris_padding": 1800.0,
+        "horizons_step_size": "1m"
+    },
+    
+    "udl_files": [
+        "/home/pascal/Documents/lunar-od/data/processed/Capstone/CAPSTONE_TDOA-FDOA_ke_cd_2025-10-11T164121.v19.json",
+        "/home/pascal/Documents/lunar-od/data/processed/Capstone/CAPSTONE_TDOA-FDOA_yg_cd_2025-10-11T164121.v19.json",
+        "/home/pascal/Documents/lunar-od/data/processed/Capstone/CAPSTONE_TDOA-FDOA_yg_ke_2025-10-11T164121.v19.json"
+    ],
+    
+    "estimation": {
+        "position_perturbation": [10000.0, 100000.0, 10000.0],
+        "velocity_perturbation": [50.0, 0.0, 0.0],
+        "max_iterations": 10,
+        "convergence_threshold": 1e-10,
+        "min_iterations": 3,
+        "integrator_step_size": 10.0
+    },
+    
+    "dynamics": {
+        "srp_surface_area": 0.402,
+        "srp_reflectivity": 1.3,
+        "earth_sh_degree": 50,
+        "earth_sh_order": 50,
+        "moon_sh_degree": 50,
+        "moon_sh_order": 50
+    },
+    
+    "output": {
+        "path": "/home/pascal/Documents/lunar-od/results/estimator_results/estimation_results_range.h5",
+        "generate_xdmf": true
+    }
+}

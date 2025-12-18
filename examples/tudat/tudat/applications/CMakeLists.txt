@@ -52,6 +52,15 @@ target_link_libraries(simulateSpacecraft
         PRIVATE HighFive HDF5::HDF5 tudat_horizons_interface CURL::libcurl
         )
 
+# Build estimateGeneralized - generalized state estimation with CLI args and JSON config
+TUDAT_ADD_EXECUTABLE(estimateGeneralized
+        "estimateGeneralized.cpp"
+        ${Tudat_ESTIMATION_LIBRARIES}
+        )
+target_link_libraries(estimateGeneralized 
+        PUBLIC ${Tudat_ESTIMATION_LIBRARIES}
+        PRIVATE HighFive HDF5::HDF5 tudat_horizons_interface CURL::libcurl
+        )
 
 # Build bepicolombo application with liblro library
 # add_library(lro STATIC liblro.cpp liblro.h)

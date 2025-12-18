@@ -458,6 +458,18 @@ public:
     }
     
     /**
+     * @brief Add a trajectory configuration for XDMF generation
+     * @param config The trajectory configuration to add
+     * 
+     * Use this when you have written trajectory data directly to the HDF5 file
+     * (not using addSingleArcResults) but still want it included in the XDMF output.
+     */
+    void addTrajectoryConfig( const TrajectoryConfig& config )
+    {
+        trajectoryConfigs_.push_back( config );
+    }
+    
+    /**
      * @brief Get the observation configurations for all stored observation sets
      * @return Vector of ObservationXDMFConfig objects
      */

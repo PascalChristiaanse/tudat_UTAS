@@ -74,7 +74,7 @@
             "name": "default-build",
             "hidden": false,
             "configurePreset": "default",
-            "jobs": 16,
+            "jobs": 8,
             "targets": [
                 "all"
             ]
@@ -82,7 +82,7 @@
         {
             "name": "default-build-no-tests",
             "configurePreset": "default-no-tests",
-            "jobs": 16,
+            "jobs": 8,
             "targets": [
                 "all"
             ]
@@ -90,7 +90,7 @@
         {
             "name": "debug-build",
             "configurePreset": "debug",
-            "jobs": 16,
+            "jobs": 8,
             "targets": [
                 "all"
             ]
@@ -98,7 +98,7 @@
         {
             "name": "debug-build-no-tests",
             "configurePreset": "debug-no-tests",
-            "jobs": 16,
+            "jobs": 8,
             "targets": [
                 "all"
             ]
@@ -106,7 +106,7 @@
         {
             "name": "debug-build-with-tutorials",
             "configurePreset": "debug-with-tutorials",
-            "jobs": 16,
+            "jobs": 8,
             "targets": [
                 "all"
             ]
@@ -114,7 +114,7 @@
         {
             "name": "profile-build-with-tutorials",
             "configurePreset": "profile-with-tutorials",
-            "jobs": 16,
+            "jobs": 8,
             "targets": [
                 "all"
             ]
@@ -122,7 +122,7 @@
         {
             "name": "profile-build-kplo-only",
             "configurePreset": "profile-with-tutorials",
-            "jobs": 16,
+            "jobs": 8,
             "targets": [
                 "kplo_vlbi_estimation"
             ]
@@ -136,17 +136,49 @@
             ]
         },
         {
-            "name": "profile-build-HDF5-observation-only",
+            "name": "Estimate satellite state",
             "configurePreset": "profile-with-tutorials",
-            "jobs": 16,
+            "jobs": 8,
             "targets": [
-                "hdf5_observation_example"
+                "estimateSatelliteState"
+            ]
+        },
+        {
+            "name": "Estimate state from FDOA",
+            "configurePreset": "profile-with-tutorials",
+            "jobs": 8,
+            "targets": [
+                "estimateSatelliteStateFDOA"
+            ]
+        },
+        {
+            "name": "TDOA simulated",
+            "configurePreset": "profile-with-tutorials",
+            "jobs": 8,
+            "targets": [
+                "estimateSatelliteStateTDOASimulated"
+            ]
+        },
+        {
+            "name": "Generalized Estimation",
+            "configurePreset": "profile-with-tutorials",
+            "jobs": 8,
+            "targets": [
+                "estimateGeneralized"
+            ]            
+        },
+        {
+            "name": "estimate using FDOA data",
+            "configurePreset": "profile-with-tutorials",
+            "jobs": 8,
+            "targets": [
+                "estimateSatelliteStateFDOA"
             ]
         },
         {
             "name": "clean",
             "configurePreset": "default",
-            "jobs": 16,
+            "jobs": 8,
             "targets": [
                 "clean"
             ]

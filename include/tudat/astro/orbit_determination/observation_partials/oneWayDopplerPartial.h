@@ -207,22 +207,26 @@ private:
 class OneWayDopplerScaling : public DirectPositionPartialScaling< 1 >
 {
 public:
-    //! Destructor
+    //! Constructor
     /*!
-     * Destructor
+     * Constructor
      * \param transmitterAccelerationFunction Function returning the Cartesian acceleration of the transmitter as a function of
      * time.
      * \param receiverAccelerationFunction Function returning the Cartesian acceleration of the receiver as a function of
      * time.
+     * \param divisionTerm Term to divide the Doppler observable by (typically speed of light).
      * \param transmitterProperTimePartials Object used to compute the contribution of receiver proper time rate to the scaling
      * \param receiverProperTimePartials Object used to compute the contribution of transmitter proper time rate to the scaling
+     * \param observableType Observable type for this scaling object (defaults to one_way_doppler, but can be overridden
+     *        for one_way_frequency_of_arrival which uses the same mathematical formulation)
      */
     OneWayDopplerScaling( const std::function< Eigen::Vector3d( const double ) > transmitterAccelerationFunction,
                           const std::function< Eigen::Vector3d( const double ) > receiverAccelerationFunction,
                           const double divisionTerm,
                           const std::shared_ptr< OneWayDopplerProperTimeComponentScaling > transmitterProperTimePartials = nullptr,
-                          const std::shared_ptr< OneWayDopplerProperTimeComponentScaling > receiverProperTimePartials = nullptr ):
-        DirectPositionPartialScaling< 1 >( observation_models::one_way_doppler ),
+                          const std::shared_ptr< OneWayDopplerProperTimeComponentScaling > receiverProperTimePartials = nullptr,
+                          const observation_models::ObservableType observableType = observation_models::one_way_doppler ):
+        DirectPositionPartialScaling< 1 >( observableType ),
         transmitterAccelerationFunction_( transmitterAccelerationFunction ), receiverAccelerationFunction_( receiverAccelerationFunction ),
         divisionTerm_( divisionTerm ), transmitterProperTimePartials_( transmitterProperTimePartials ),
         receiverProperTimePartials_( receiverProperTimePartials )

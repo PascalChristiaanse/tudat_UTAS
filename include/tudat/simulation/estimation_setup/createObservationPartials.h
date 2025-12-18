@@ -72,8 +72,6 @@ createDifferencedObservablePartials(
         const bool isPartialForDifferencedObservable = false,
         const bool isPartialForConcatenatedObservable = false );
 
-
-
 //! Interface class for creating observation partials
 /*!
  *  Interface class for creating observation partials. This class is used instead of a single
@@ -201,6 +199,7 @@ public:
                         observationModel, bodies, parametersToEstimate, isPartialForDifferencedObservable );
                 break;
             case observation_models::differenced_time_of_arrival:
+            case observation_models::differenced_frequency_of_arrival:
                 if( isPartialForConcatenatedObservable )
                 {
                     throw std::runtime_error(
@@ -209,15 +208,7 @@ public:
                 observationPartials = createDifferencedObservablePartials< ObservationScalarType, TimeType, 1 >(
                         observationModel, bodies, parametersToEstimate, isPartialForDifferencedObservable );
                 break;
-            case observation_models::differenced_frequency_of_arrival:
-                if( isPartialForConcatenatedObservable )
-                {
-                    throw std::runtime_error(
-                            "Error when requesting partial creation for differenced frequency of arrival; concatenated partial not supported" );
-                }
-                observationPartials = createDifferencedObservablePartials< ObservationScalarType, TimeType, 1 >(
-                        observationModel, bodies, parametersToEstimate, isPartialForDifferencedObservable );
-                break;
+
             case observation_models::n_way_differenced_range:
             case observation_models::dsn_n_way_averaged_doppler:
                 if( isPartialForDifferencedObservable )
@@ -443,8 +434,6 @@ createObservablePartialsList(
     return partialsList;
 }
 
-
-
 template< int ObservationSize, typename ScalarType, typename TimeType >
 class DifferencedObservationPartialCreator
 {
@@ -583,11 +572,11 @@ public:
                                     "input object type is incompatible" );
                         }
                         else if( std::dynamic_pointer_cast< DirectObservationPartial< 1 > >( firstPartial )->getObservableType( ) !=
-                                 one_way_range )
+                                 one_way_frequency_of_arrival )
                         {
                             throw std::runtime_error(
                                     "Error when creating differenced frequency of arrival partial; first "
-                                    "input observable type is incompatible" );
+                                    "input observable type is incompatible (expected one_way_frequency_of_arrival)" );
                         }
                     }
 
@@ -600,11 +589,11 @@ public:
                                     "input object type is incompatible" );
                         }
                         else if( std::dynamic_pointer_cast< DirectObservationPartial< 1 > >( secondPartial )->getObservableType( ) !=
-                                 one_way_range )
+                                 one_way_frequency_of_arrival )
                         {
                             throw std::runtime_error(
                                     "Error when creating differenced frequency of arrival partial; second "
-                                    "input observable type is incompatible" );
+                                    "input observable type is incompatible (expected one_way_frequency_of_arrival)" );
                         }
                     }
                 }
@@ -614,7 +603,7 @@ public:
                         secondPartial,
                         &observation_models::getDifferencedFrequencyOfArrivalScalingFactor,
                         getUndifferencedTimeAndStateIndices( differenced_frequency_of_arrival, linkEnds.size( ) ),
-                        &getDifferencedTimeOfArrivalDifferencedReferenceLinkEndTypes );
+                        &getDifferencedFrequencyOfArrivalDifferencedReferenceLinkEndTypes );
                 break;
             }
             case n_way_differenced_range: {

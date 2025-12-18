@@ -240,23 +240,23 @@ public:
                 break;
             }
             case observation_models::differenced_frequency_of_arrival: {
-                if( std::dynamic_pointer_cast< OneWayRangeScaling >( firstPositionPartialScaling ) == nullptr )
+                if( std::dynamic_pointer_cast< OneWayDopplerScaling >( firstPositionPartialScaling ) == nullptr )
                 {
                     throw std::runtime_error(
-                            "Error when creating differenced frequency of arrival scaling object, first range partial is of incompatible "
-                            "type" );
+                            "Error when creating differenced frequency of arrival scaling object, first FOA partial is of incompatible "
+                            "type (expected OneWayDopplerScaling)" );
                 }
-                if( std::dynamic_pointer_cast< OneWayRangeScaling >( secondPositionPartialScaling ) == nullptr )
+                if( std::dynamic_pointer_cast< OneWayDopplerScaling >( secondPositionPartialScaling ) == nullptr )
                 {
                     throw std::runtime_error(
-                            "Error when creating differenced frequency of arrival scaling object, second range partial is of incompatible "
-                            "type" );
+                            "Error when creating differenced frequency of arrival scaling object, second FOA partial is of incompatible "
+                            "type (expected OneWayDopplerScaling)" );
                 }
                 positionPartialScaler = std::make_shared< DifferencedObservablePartialScaling >(
                         firstPositionPartialScaling,
                         secondPositionPartialScaling,
                         observation_models::getUndifferencedTimeAndStateIndices( observation_models::differenced_frequency_of_arrival, 3 ),
-                        &getDifferencedTimeOfArrivalDifferencedReferenceLinkEndTypes );
+                        &getDifferencedFrequencyOfArrivalDifferencedReferenceLinkEndTypes );
                 break;
             }
             case observation_models::n_way_differenced_range:

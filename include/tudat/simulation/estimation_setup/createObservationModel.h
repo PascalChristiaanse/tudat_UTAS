@@ -2934,6 +2934,10 @@ public:
                                             observableTimeScale );
 
                     // Always set the frequency interpolator for FDOA - required for transmitter frequency computation
+                    if (getTransmittingFrequencyInterpolator( bodies, linkEnds ) == nullptr)
+                    {
+                        throw std::runtime_error( "Error when creating differenced frequency of arrival model, no transmitting frequency found" );
+                    }
                     differencedFrequencyOfArrivalModel->setFrequencyInterpolator( getTransmittingFrequencyInterpolator( bodies, linkEnds ) );
 
                     observationModel = differencedFrequencyOfArrivalModel;
@@ -3752,13 +3756,19 @@ public:
                         differencedFrequencyOfArrivalModel = std::dynamic_pointer_cast<
                                 observation_models::OneWayDifferencedFrequencyOfArrivalObservationModel< ObservationScalarType, TimeType > >(
                                 differencedObservationModel );
+                if ( differencedFrequencyOfArrivalModel == nullptr )
+                {
+                    throw std::runtime_error(
+                            "Error when extracting undifferenced observation model. Differenced "
+                            "frequency of arrival model could not be casted." );
+                }
                 LinkEnds fullLinkEnds = differencedFrequencyOfArrivalModel->getLinkEnds( );
                 LinkEnds firstLinkEnds;
                 firstLinkEnds[ receiver ] = fullLinkEnds[ receiver ];
                 firstLinkEnds[ transmitter ] = fullLinkEnds[ transmitter ];
 
                 firstObservationModel =
-                        std::make_shared< observation_models::OneWayRangeObservationModel< ObservationScalarType, TimeType > >(
+                        std::make_shared< observation_models::OneWayFrequencyOfArrivalObservationModel< ObservationScalarType, TimeType > >(
                                 firstLinkEnds, differencedFrequencyOfArrivalModel->getFirstReceiverLightTimeCalculator( ) );
 
                 LinkEnds secondLinkEnds;
@@ -3766,7 +3776,7 @@ public:
                 secondLinkEnds[ transmitter ] = fullLinkEnds[ transmitter ];
 
                 secondObservationModel =
-                        std::make_shared< observation_models::OneWayRangeObservationModel< ObservationScalarType, TimeType > >(
+                        std::make_shared< observation_models::OneWayFrequencyOfArrivalObservationModel< ObservationScalarType, TimeType > >(
                                 secondLinkEnds, differencedFrequencyOfArrivalModel->getSecondReceiverLightTimeCalculator( ) );
                 break;
             }

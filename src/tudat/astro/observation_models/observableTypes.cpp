@@ -239,6 +239,7 @@ bool requiresFirstReceivingStation( const ObservableType observableType )
         case dsn_n_way_averaged_doppler:
         case dsn_n_way_range:
         case differenced_time_of_arrival:
+        case differenced_frequency_of_arrival:
         case one_way_frequency_of_arrival:
             requiresFirstReceivingStation = false;
             break;
@@ -335,6 +336,7 @@ bool isPhaseVelocityBasedObservableType( const ObservableType observableType )
         case dsn_n_way_averaged_doppler:
         case dsn_one_way_averaged_doppler:
         case one_way_frequency_of_arrival:
+        case differenced_frequency_of_arrival:
             isPhaseVelocityBased = true;
             break;
         case one_way_range:
@@ -346,7 +348,6 @@ bool isPhaseVelocityBasedObservableType( const ObservableType observableType )
         case velocity_observable:
         case relative_angular_position:
         case differenced_time_of_arrival:
-        case differenced_frequency_of_arrival:
             isPhaseVelocityBased = false;
             break;
         default:
@@ -671,8 +672,10 @@ ObservableType getUndifferencedObservableType( const ObservableType differencedO
     switch( differencedObservableType )
     {
         case one_way_differenced_range:
-        case differenced_time_of_arrival:
         case differenced_frequency_of_arrival:
+            undifferencedObservableType = one_way_frequency_of_arrival;
+            break;
+        case differenced_time_of_arrival:
             undifferencedObservableType = one_way_range;
             break;
         case n_way_differenced_range:
@@ -688,7 +691,6 @@ ObservableType getUndifferencedObservableType( const ObservableType differencedO
     }
     return undifferencedObservableType;
 }
-
 
 ObservableType getUnconcatenatedObservableType( const ObservableType observableType )
 {
@@ -717,9 +719,8 @@ ObservableType getBaseObservableType( const ObservableType observableType )
         case n_way_range:
         case dsn_n_way_range:
         case differenced_time_of_arrival:
-        case differenced_frequency_of_arrival:
-            baseObservableType = one_way_range;
-            break;
+        baseObservableType = one_way_range;
+        break;
         case one_way_doppler:
         case one_way_differenced_range:
         case two_way_doppler:
@@ -727,12 +728,13 @@ ObservableType getBaseObservableType( const ObservableType observableType )
         case dsn_one_way_averaged_doppler:
         case dsn_n_way_averaged_doppler:
         case doppler_measured_frequency:
-            baseObservableType = one_way_doppler;
-            break;
+        baseObservableType = one_way_doppler;
+        break;
         case angular_position:
         case relative_angular_position:
-            baseObservableType = angular_position;
-            break;
+        baseObservableType = angular_position;
+        break;
+        case differenced_frequency_of_arrival:
         case one_way_frequency_of_arrival:
         baseObservableType = one_way_frequency_of_arrival;
         break;
@@ -756,6 +758,7 @@ std::pair< std::vector< int >, std::vector< int > > getUndifferencedTimeAndState
             secondIndices = { 2, 3 };
             break;
         case differenced_time_of_arrival:
+        case differenced_frequency_of_arrival:
             firstIndices = { 0, 1 };
             secondIndices = { 0, 2 };
             break;
@@ -1119,6 +1122,24 @@ std::vector< int > getLinkEndIndicesForLinkEndTypeAtObservable( const Observable
                     throw std::runtime_error( errorMessage );
             }
             break;
+        case differenced_frequency_of_arrival:
+            switch( linkEndType )
+            {
+                case transmitter:
+                    linkEndIndices.push_back( 0 );
+                    break;
+                case receiver:
+                    linkEndIndices.push_back( 1 );
+                    break;
+                case receiver2:
+                    linkEndIndices.push_back( 2 );
+                    break;
+                default:
+                    std::string errorMessage = "Error, could not find link end type index for link end " + std::to_string( linkEndType ) +
+                            " of observable " + std::to_string( observableType );
+                    throw std::runtime_error( errorMessage );
+            }
+            break;
         case one_way_frequency_of_arrival:
             switch( linkEndType )
             {
@@ -1175,6 +1196,7 @@ LinkEndType getDefaultReferenceLinkEndType( const ObservableType observableType 
             break;
         case one_way_differenced_range:
         case one_way_frequency_of_arrival:
+        case differenced_frequency_of_arrival:
         case differenced_time_of_arrival:
             referenceLinkEndType = receiver;
             break;
@@ -1266,6 +1288,7 @@ int getNumberOfLinksInObservable( const ObservableType observableType, const int
             numberOfLinks = 0;
             break;
         case relative_angular_position:
+        case differenced_frequency_of_arrival:
         case differenced_time_of_arrival:
             numberOfLinks = 3;
             break;
@@ -1284,7 +1307,7 @@ int getNumberOfLinksInObservable( const ObservableType observableType, const int
 std::vector< LinkEndType > getLinkEndTypesForGivenLinkEndId( const LinkEnds& linkEnds, const LinkEndId linkEndToCheck )
 {
     std::vector< LinkEndType > linkEndTypeList;
-    for( auto linkEndIterator: linkEnds )
+    for( auto linkEndIterator : linkEnds )
     {
         if( linkEndToCheck == linkEndIterator.second )
         {
@@ -1555,6 +1578,29 @@ std::vector< std::pair< int, int > > getLinkStateAndTimeIndicesForLinkEnd( const
                 throw std::runtime_error( "Error, parsed irrelevant angular position link end types for link end indices" );
             }
             break;
+        case differenced_frequency_of_arrival:
+            if( ( linkEnds.at( transmitter ) == linkEndToCheck ) ||
+                ( ( linkEnds.at( transmitter ).bodyName_ == linkEndToCheck.bodyName_ ) && ( linkEndToCheck.stationName_ == "" ) ) )
+            {
+                linkEndIndices.push_back( std::make_pair( 0, 1 ) );
+                linkEndIndices.push_back( std::make_pair( 0, 2 ) );
+            }
+            else if( ( linkEnds.at( receiver ) == linkEndToCheck ) ||
+                     ( ( linkEnds.at( receiver ).bodyName_ == linkEndToCheck.bodyName_ ) && ( linkEndToCheck.stationName_ == "" ) ) )
+            {
+                linkEndIndices.push_back( std::make_pair( 1, 0 ) );
+            }
+            else if( linkEnds.at( receiver2 ) == linkEndToCheck ||
+                     ( ( linkEnds.at( receiver2 ).bodyName_ == linkEndToCheck.bodyName_ ) && linkEndToCheck.stationName_ == "" ) )
+            {
+                linkEndIndices.push_back( std::make_pair( 2, 0 ) );
+            }
+            else
+            {
+                throw std::runtime_error( "Error, parsed irrelevant angular position link end types for link end indices" );
+            }
+            break;
+        
         case one_way_frequency_of_arrival:
             if( ( linkEnds.at( transmitter ) == linkEndToCheck ) ||
                 ( ( linkEnds.at( transmitter ).bodyName_ == linkEndToCheck.bodyName_ ) && ( linkEndToCheck.stationName_ == "" ) ) )
@@ -1633,7 +1679,7 @@ std::vector< std::pair< std::pair< LinkEndType, LinkEndId >, std::pair< LinkEndT
         case one_way_frequency_of_arrival: {
             // Retrieve link indices
             std::map< int, std::pair< LinkEndType, LinkEndId > > linkIndices;
-            for( auto linkEndIt: linkEnds )
+            for( auto linkEndIt : linkEnds )
             {
                 linkIndices[ getNWayLinkIndexFromLinkEndType( linkEndIt.first, linkEnds.size( ) ) ] =
                         std::make_pair( linkEndIt.first, linkEndIt.second );
@@ -1659,6 +1705,13 @@ std::vector< std::pair< std::pair< LinkEndType, LinkEndId >, std::pair< LinkEndT
             break;
         }
         case differenced_time_of_arrival: {
+            interlinks.push_back( std::make_pair( std::make_pair( receiver, linkEnds.at( receiver ) ),
+                                                  std::make_pair( transmitter, linkEnds.at( transmitter ) ) ) );
+            interlinks.push_back( std::make_pair( std::make_pair( receiver2, linkEnds.at( receiver2 ) ),
+                                                  std::make_pair( transmitter, linkEnds.at( transmitter ) ) ) );
+            break;
+        }
+        case differenced_frequency_of_arrival: {
             interlinks.push_back( std::make_pair( std::make_pair( receiver, linkEnds.at( receiver ) ),
                                                   std::make_pair( transmitter, linkEnds.at( transmitter ) ) ) );
             interlinks.push_back( std::make_pair( std::make_pair( receiver2, linkEnds.at( receiver2 ) ),

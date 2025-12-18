@@ -233,6 +233,20 @@ public:
                 observationPartials = createDifferencedObservablePartials< ObservationScalarType, TimeType, 1 >(
                         observationModel, bodies, parametersToEstimate );
                 break;
+            case observation_models::one_way_frequency_of_arrival:
+                if( isPartialForConcatenatedObservable )
+                {
+                    throw std::runtime_error(
+                            "Error when requesting partial creation for frequency of arrival; concatenated partial not supported" );
+                }
+                observationPartials =
+                        createSingleLinkObservationPartials< ObservationScalarType, 1, TimeType >( observationModel,
+                                                                                                   bodies,
+                                                                                                   parametersToEstimate,
+                                                                                                   isPartialForDifferencedObservable,
+                                                                                                   isPartialForConcatenatedObservable );
+
+                break;
             default:
                 std::string errorMessage = "Error when making observation partial set, could not recognize observable " +
                         std::to_string( observationModel->getObservableType( ) ) + " of size 1 ";

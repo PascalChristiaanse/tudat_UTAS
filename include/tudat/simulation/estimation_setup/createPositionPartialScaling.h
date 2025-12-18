@@ -145,6 +145,39 @@ public:
 
                 break;
             }
+            case observation_models::one_way_frequency_of_arrival: {
+                // FOA is mathematically equivalent to one-way Doppler (measures frequency shift due to range-rate)
+                // Create numerical state derivative functions for transmitter and receiver
+                std::function< Eigen::Vector6d( const double ) > transmitterNumericalStateDerivativeFunction =
+                        std::bind( &numerical_derivatives::computeCentralDifferenceFromFunction< Eigen::Vector6d, double >,
+                                   simulation_setup::getLinkEndCompleteEphemerisFunction< double, double >(
+                                           linkEnds.at( observation_models::transmitter ), bodies ),
+                                   std::placeholders::_1,
+                                   100.0,
+                                   numerical_derivatives::order8 );
+                std::function< Eigen::Vector6d( const double ) > receiverNumericalStateDerivativeFunction =
+                        std::bind( numerical_derivatives::computeCentralDifferenceFromFunction< Eigen::Vector6d, double >,
+                                   simulation_setup::getLinkEndCompleteEphemerisFunction< double, double >(
+                                           linkEnds.at( observation_models::receiver ), bodies ),
+                                   std::placeholders::_1,
+                                   100.0,
+                                   numerical_derivatives::order8 );
+
+                // FOA observable is normalized by speed of light (like standard Doppler)
+                positionPartialScaler = std::make_shared< OneWayDopplerScaling >(
+                        std::bind( &linear_algebra::evaluateSecondBlockInStateVector,
+                                   transmitterNumericalStateDerivativeFunction,
+                                   std::placeholders::_1 ),
+                        std::bind( &linear_algebra::evaluateSecondBlockInStateVector,
+                                   receiverNumericalStateDerivativeFunction,
+                                   std::placeholders::_1 ),
+                        physical_constants::SPEED_OF_LIGHT,
+                        nullptr,  // No proper time partials for FOA
+                        nullptr,
+                        observation_models::one_way_frequency_of_arrival );  // Override observable type for FOA
+
+                break;
+            }
             default:
                 throw std::runtime_error( "Error when creating partial scaler for " +
                                           observation_models::getObservableName( observableType, linkEnds.size( ) ) +

@@ -1,10 +1,9 @@
 {
-    "observation_types": ["TDOA", "FDOA"    estimationOutput->residualHistory_
-],
+    "observation_types": [],
     "simulate_observations": true,
     
     "frame": {
-        "origin": "Moon",
+        "origin": "SSB",
         "orientation": "ECLIPJ2000"
     },
     
@@ -17,7 +16,7 @@
     "time": {
         "start_date": "2025-10-11T16:41:21.772479857",
         "end_date": "2025-10-11T17:00:10.772479857",
-        "timestep": 1.0,
+        "timestep": 100.0,
         "ephemeris_padding": 1800.0,
         "horizons_step_size": "1m"
     },
@@ -29,9 +28,9 @@
     ],
     
     "estimation": {
-        "position_perturbation": [10000.0, 10000.0, 10000.0],
-        "velocity_perturbation": [50.0, 0.0, 0.0],
-        "max_iterations": 10,
+        "position_perturbation": [10000.0, 0.0, 0.0],
+        "velocity_perturbation": [1.0, 0.0, 0.0],
+        "max_iterations": 20,
         "convergence_threshold": 1e-10,
         "min_iterations": 3,
         "integrator_step_size": 10.0
@@ -40,10 +39,10 @@
     "dynamics": {
         "srp_surface_area": 0.402,
         "srp_reflectivity": 1.3,
-        "earth_sh_degree": 100,
-        "earth_sh_order": 100,
-        "moon_sh_degree": 200,
-        "moon_sh_order": 200
+        "earth_sh_degree": 2,
+        "earth_sh_order": 2,
+        "moon_sh_degree": 2,
+        "moon_sh_order": 2
     },
     
     "output": {

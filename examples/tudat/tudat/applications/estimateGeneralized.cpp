@@ -51,8 +51,7 @@ using json = nlohmann::json;
 // Configuration Structure
 // =============================================================================
 
-struct EstimationConfig
-{
+struct EstimationConfig {
     // Observation mode
     bool useTDOA = true;
     bool useFDOA = false;
@@ -90,7 +89,7 @@ struct EstimationConfig
     double integratorStepSize = 10.0;
 
     // SRP configuration
-    double srpSurfaceArea = 1.0;          // m^2
+    double srpSurfaceArea = 1.0;              // m^2
     double srpReflectivityCoefficient = 1.5;  // typical for spacecraft
 
     // Gravity model settings
@@ -161,14 +160,11 @@ std::vector< Time > generateObservationTimes(
 
 SystemOfBodies createSimulationEnvironment( const EstimationConfig& config );
 
-std::shared_ptr< ObservationCollection< double, Time > > setupGroundStations(
-        SystemOfBodies& bodies,
-        BatchVLBI& udl );
+std::shared_ptr< ObservationCollection< double, Time > > setupGroundStations( SystemOfBodies& bodies, BatchVLBI& udl );
 
-void createSpacecraftBody(
-        SystemOfBodies& bodies,
-        const EstimationConfig& config,
-        const std::map< double, Eigen::Vector6d >& ephemerisData );
+void createSpacecraftBody( SystemOfBodies& bodies,
+                           const EstimationConfig& config,
+                           const std::map< double, Eigen::Vector6d >& ephemerisData );
 
 std::pair< std::vector< std::shared_ptr< ObservationModelSettings > >,
            std::vector< std::shared_ptr< ObservationSimulationSettings< double > > > >
@@ -201,6 +197,7 @@ void printUsage( const char* programName )
               << "  -r, --range                 Enable one-way range observations\n"
               << "  -o, --output <path>         Output HDF5 file path\n"
               << "  -p, --perturbation <x,y,z,vx,vy,vz>  Initial state perturbation\n"
+              << "  -S, --step-size <seconds>   Integrator step size (default: 10.0)\n"
               << "\nNotes:\n"
               << "  - Command-line arguments override config file settings\n"
               << "  - If no observation type specified, config file settings are used\n"
@@ -321,21 +318,20 @@ EstimationConfig parseCommandLineArgs( int argc, char** argv )
     std::string configFile;
     bool tdoaSet = false, fdoaSet = false, rangeSet = false;
 
-    static struct option longOptions[] = {
-        { "help",        no_argument,       nullptr, 'h' },
-        { "config",      required_argument, nullptr, 'c' },
-        { "simulate",    no_argument,       nullptr, 's' },
-        { "actual",      no_argument,       nullptr, 'a' },
-        { "tdoa",        no_argument,       nullptr, 't' },
-        { "fdoa",        no_argument,       nullptr, 'f' },
-        { "range",       no_argument,       nullptr, 'r' },
-        { "output",      required_argument, nullptr, 'o' },
-        { "perturbation", required_argument, nullptr, 'p' },
-        { nullptr, 0, nullptr, 0 }
-    };
+    static struct option longOptions[] = { { "help", no_argument, nullptr, 'h' },
+                                           { "config", required_argument, nullptr, 'c' },
+                                           { "simulate", no_argument, nullptr, 's' },
+                                           { "actual", no_argument, nullptr, 'a' },
+                                           { "tdoa", no_argument, nullptr, 't' },
+                                           { "fdoa", no_argument, nullptr, 'f' },
+                                           { "range", no_argument, nullptr, 'r' },
+                                           { "output", required_argument, nullptr, 'o' },
+                                           { "perturbation", required_argument, nullptr, 'p' },
+                                           { "step-size", required_argument, nullptr, 'S' },
+                                           { nullptr, 0, nullptr, 0 } };
 
     int opt;
-    while( ( opt = getopt_long( argc, argv, "hc:satfro:p:", longOptions, nullptr ) ) != -1 )
+    while( ( opt = getopt_long( argc, argv, "hc:satfro:p:S:", longOptions, nullptr ) ) != -1 )
     {
         switch( opt )
         {
@@ -366,8 +362,7 @@ EstimationConfig parseCommandLineArgs( int argc, char** argv )
             case 'o':
                 config.outputPath = optarg;
                 break;
-            case 'p':
-            {
+            case 'p': {
                 // Parse perturbation: x,y,z,vx,vy,vz
                 std::string pertStr( optarg );
                 std::vector< double > vals;
@@ -387,6 +382,9 @@ EstimationConfig parseCommandLineArgs( int argc, char** argv )
                 }
                 break;
             }
+            case 'S':
+                config.integratorStepSize = std::stod( optarg );
+                break;
             default:
                 printUsage( argv[ 0 ] );
                 std::exit( 1 );
@@ -461,9 +459,8 @@ EstimationConfig parseCommandLineArgs( int argc, char** argv )
 // Time Generation
 // =============================================================================
 
-std::vector< Time > generateObservationTimes(
-        const EstimationConfig& config,
-        std::shared_ptr< TerrestrialTimeScaleConverter > timeConverter )
+std::vector< Time > generateObservationTimes( const EstimationConfig& config,
+                                              std::shared_ptr< TerrestrialTimeScaleConverter > timeConverter )
 {
     // Convert start and end date strings UTC to seconds since J2000 TDB
     Time startTimeUTC = tba::timeFromIsoString< tudat::Time >( config.startDateString );
@@ -484,8 +481,8 @@ std::vector< Time > generateObservationTimes(
     std::cout << "Start ISO Date: " << isoStart << " TDB" << std::endl;
     std::cout << "End   ISO Date: " << isoEnd << " TDB" << std::endl;
 
-    int size =
-            static_cast< int >( std::ceil( ( static_cast< double >( endTimeTDB ) - static_cast< double >( startTimeTDB ) ) / config.observationTimestep ) ) +
+    int size = static_cast< int >( std::ceil( ( static_cast< double >( endTimeTDB ) - static_cast< double >( startTimeTDB ) ) /
+                                              config.observationTimestep ) ) +
             1;
     std::vector< Time > observationTimes( size );
     for( int i = 0; i < size; ++i )
@@ -507,39 +504,38 @@ SystemOfBodies createSimulationEnvironment( const EstimationConfig& config )
     spice_interface::loadStandardSpiceKernels( );
 
     // Create bodies - include Sun for SRP, inner planets (Mercury, Venus, Mars), and outer planets (Jupiter, Saturn)
-    std::vector< std::string > bodiesToCreate = { 
-        "Sun", "Mercury", "Venus", "Earth", "Moon", "Mars", "Jupiter", "Saturn" 
-    };
+    std::vector< std::string > bodiesToCreate = { "Sun", "Mercury", "Venus", "Earth", "Moon", "Mars", "Jupiter", "Saturn" };
     BodyListSettings bodySettings = getDefaultBodySettings( bodiesToCreate, config.globalFrameOrigin, config.globalFrameOrientation );
 
     // Configure Earth rotation model for ground station positions
-    // bodySettings.get( "Earth" )->rotationModelSettings =
-    //         gcrsToItrsRotationModelSettings( tudat::basic_astrodynamics::iau_2006, config.globalFrameOrientation, nullptr, nullptr, nullptr );
+    bodySettings.get( "Earth" )->rotationModelSettings =
+            gcrsToItrsRotationModelSettings( tudat::basic_astrodynamics::iau_2006, config.globalFrameOrientation, nullptr, nullptr,
+            nullptr );
     bodySettings.get( "Earth" )->shapeModelSettings = simulation_setup::fromSpiceOblateSphericalBodyShapeSettings( );
 
     // Configure spherical harmonics gravity for Earth
-    bodySettings.get( "Earth" )->gravityFieldSettings = std::make_shared< FromFileSphericalHarmonicsGravityFieldSettings >(
-            goco05c, config.earthSphericalHarmonicsDegree );
+    // bodySettings.get( "Earth" )->gravityFieldSettings =
+    //         std::make_shared< FromFileSphericalHarmonicsGravityFieldSettings >( goco05c, config.earthSphericalHarmonicsDegree );
 
     // Configure spherical harmonics gravity for Moon
-    bodySettings.get( "Moon" )->gravityFieldSettings = std::make_shared< FromFileSphericalHarmonicsGravityFieldSettings >(
-            lpe200, config.moonSphericalHarmonicsDegree );
+    bodySettings.get( "Moon" )->gravityFieldSettings =
+            std::make_shared< FromFileSphericalHarmonicsGravityFieldSettings >( lpe200, config.moonSphericalHarmonicsDegree );
 
     // Note: Sun radiation source is automatically configured by getDefaultBodySettings()
 
     std::cout << "  Bodies: ";
     for( const auto& body : bodiesToCreate ) std::cout << body << " ";
     std::cout << std::endl;
-    std::cout << "  Earth gravity: spherical harmonics (" << config.earthSphericalHarmonicsDegree << "x" << config.earthSphericalHarmonicsOrder << ")" << std::endl;
-    std::cout << "  Moon gravity: spherical harmonics (" << config.moonSphericalHarmonicsDegree << "x" << config.moonSphericalHarmonicsOrder << ")" << std::endl;
+    std::cout << "  Earth gravity: spherical harmonics (" << config.earthSphericalHarmonicsDegree << "x"
+              << config.earthSphericalHarmonicsOrder << ")" << std::endl;
+    std::cout << "  Moon gravity: spherical harmonics (" << config.moonSphericalHarmonicsDegree << "x" << config.moonSphericalHarmonicsOrder
+              << ")" << std::endl;
     std::cout << "  Sun: radiation source enabled" << std::endl;
 
     return createSystemOfBodies< double, double >( bodySettings );
 }
 
-std::shared_ptr< ObservationCollection< double, Time > > setupGroundStations(
-        SystemOfBodies& bodies,
-        BatchVLBI& udl )
+std::shared_ptr< ObservationCollection< double, Time > > setupGroundStations( SystemOfBodies& bodies, BatchVLBI& udl )
 {
     std::cout << "Creating ground stations from UDL data..." << std::endl;
 
@@ -556,10 +552,9 @@ std::shared_ptr< ObservationCollection< double, Time > > setupGroundStations(
     return udlObservations;
 }
 
-void createSpacecraftBody(
-        SystemOfBodies& bodies,
-        const EstimationConfig& config,
-        const std::map< double, Eigen::Vector6d >& ephemerisData )
+void createSpacecraftBody( SystemOfBodies& bodies,
+                           const EstimationConfig& config,
+                           const std::map< double, Eigen::Vector6d >& ephemerisData )
 {
     std::cout << "Creating spacecraft body: " << config.targetDisplayName << std::endl;
 
@@ -567,10 +562,10 @@ void createSpacecraftBody(
     bodies.at( config.targetName )->setConstantBodyMass( config.targetMass );
 
     // Create tabulated ephemeris from data
-    auto tabulatedEphemerisSettings = std::make_shared< TabulatedEphemerisSettings >(
-            ephemerisData, config.globalFrameOrigin, config.globalFrameOrientation );
+    auto tabulatedEphemerisSettings =
+            std::make_shared< TabulatedEphemerisSettings >( ephemerisData, config.globalFrameOrigin, config.globalFrameOrientation );
     auto tabulatedEphemeris = createBodyEphemeris< double, double >( tabulatedEphemerisSettings, config.targetName );
-    bodies.at( config.targetName )->setEphemeris( tabulatedEphemeris );
+    // bodies.at( config.targetName )->setEphemeris( tabulatedEphemeris );
 
     // Set transmitter frequency for FDOA (required even if not using FDOA for model creation)
     if( config.useFDOA )
@@ -584,10 +579,11 @@ void createSpacecraftBody(
 
     // Set radiation pressure interface for SRP
     std::vector< std::string > occultingBodies = { "Earth", "Moon" };
-    auto radiationPressureSettings = cannonballRadiationPressureTargetModelSettings(
-            config.srpSurfaceArea, config.srpReflectivityCoefficient, occultingBodies );
-    bodies.at( config.targetName )->setRadiationPressureTargetModels(
-            createRadiationPressureTargetModel( radiationPressureSettings, config.targetName, bodies ) );
+    auto radiationPressureSettings =
+            cannonballRadiationPressureTargetModelSettings( config.srpSurfaceArea, config.srpReflectivityCoefficient, occultingBodies );
+    bodies.at( config.targetName )
+            ->setRadiationPressureTargetModels(
+                    createRadiationPressureTargetModel( radiationPressureSettings, config.targetName, bodies ) );
     std::cout << "  Set SRP: area=" << config.srpSurfaceArea << " m^2, Cr=" << config.srpReflectivityCoefficient << std::endl;
 
     std::cout << "  Ephemeris points: " << ephemerisData.size( ) << std::endl;
@@ -631,7 +627,8 @@ createObservationSettings(
                 std::string station1 = linkEnds.at( receiver ).stationName_;
                 std::string station2 = linkEnds.at( receiver2 ).stationName_;
                 std::string transmitterBody = linkEnds.at( transmitter ).bodyName_;
-                std::cout << "  Adding TDOA link: " << station1 << " - " << station2 << " (transmitter: " << transmitterBody << ")" << std::endl;
+                std::cout << "  Adding TDOA link: " << station1 << " - " << station2 << " (transmitter: " << transmitterBody << ")"
+                          << std::endl;
 
                 auto tdoaModelSettings = std::make_shared< DifferencedTimeOfArrivalObservationSettings >(
                         linkEnds, std::vector< std::shared_ptr< LightTimeCorrectionSettings > >( ) );
@@ -657,7 +654,8 @@ createObservationSettings(
                 std::string station1 = linkEnds.at( receiver ).stationName_;
                 std::string station2 = linkEnds.at( receiver2 ).stationName_;
                 std::string transmitterBody = linkEnds.at( transmitter ).bodyName_;
-                std::cout << "  Adding FDOA link: " << station1 << " - " << station2 << " (transmitter: " << transmitterBody << ")" << std::endl;
+                std::cout << "  Adding FDOA link: " << station1 << " - " << station2 << " (transmitter: " << transmitterBody << ")"
+                          << std::endl;
 
                 auto fdoaModelSettings = std::make_shared< DifferencedFrequencyOfArrivalObservationSettings >(
                         linkEnds, std::vector< std::shared_ptr< LightTimeCorrectionSettings > >( ) );
@@ -704,8 +702,7 @@ createObservationSettings(
             std::cout << "  Adding Range link: " << config.targetName << " -> " << stationName << std::endl;
 
             auto rangeModelSettings = std::make_shared< ObservationModelSettings >(
-                    one_way_range, rangeLinkEnds,
-                    std::vector< std::shared_ptr< LightTimeCorrectionSettings > >( ) );
+                    one_way_range, rangeLinkEnds, std::vector< std::shared_ptr< LightTimeCorrectionSettings > >( ) );
             modelSettings.push_back( rangeModelSettings );
 
             auto rangeSimSettings = std::make_shared< TabulatedObservationSimulationSettings< double > >(
@@ -777,24 +774,25 @@ int main( int argc, char** argv )
     // =========================================================================
 
     std::vector< Time > observationTimesTime = generateObservationTimes( config );
-
     std::vector< double > observationTimesDouble( observationTimesTime.size( ) );
     std::transform( observationTimesTime.begin( ), observationTimesTime.end( ), observationTimesDouble.begin( ),
                     []( const Time& t ) { return static_cast< double >( t ); } );
 
-    Time startEpochPadded = *std::min_element( observationTimesTime.begin( ), observationTimesTime.end( ) ) - config.ephemerisPadding;
-    Time endEpochPadded = *std::max_element( observationTimesTime.begin( ), observationTimesTime.end( ) ) + config.ephemerisPadding;
+    double startEpoch = *std::min_element( observationTimesDouble.begin( ), observationTimesDouble.end( ) );
+    double endEpoch = *std::max_element( observationTimesDouble.begin( ), observationTimesDouble.end( ) );
+    double startEpochPadded = startEpoch - config.ephemerisPadding;
+    double endEpochPadded = endEpoch + config.ephemerisPadding;
 
     std::cout << "\nObservation time configuration:" << std::endl;
-    std::cout << "  Duration: " << ( observationTimesDouble.back( ) - observationTimesDouble.front( ) ) / 60.0 << " minutes" << std::endl;
-    std::cout << "  Epochs: " << observationTimesDouble.size( ) << std::endl;
+    std::cout << "  Duration: " << ( endEpoch - startEpoch ) / 60.0 << " minutes" << std::endl;
+    std::cout << "  Epochs: " << observationTimesTime.size( ) << std::endl;
 
     // =========================================================================
     // Query Horizons for true ephemeris
     // =========================================================================
 
     std::cout << "\nQuerying JPL Horizons for " << config.targetDisplayName << " ephemeris..." << std::endl;
-    
+
     // Map global frame origin to Horizons center code
     std::string horizonsCenter = "@SSB";  // default: Solar System Barycenter
     if( config.globalFrameOrigin == "SSB" || config.globalFrameOrigin == "Solar System Barycenter" )
@@ -819,43 +817,41 @@ int main( int argc, char** argv )
     }
     else
     {
-        std::cout << "  Warning: Unknown frame origin '" << config.globalFrameOrigin 
-                  << "', using SSB for Horizons query" << std::endl;
+        std::cout << "  Warning: Unknown frame origin '" << config.globalFrameOrigin << "', using SSB for Horizons query" << std::endl;
     }
     std::cout << "  Horizons center: " << horizonsCenter << " (frame origin: " << config.globalFrameOrigin << ")" << std::endl;
-    
-    auto horizonsStateHistory = HorizonsQuery( config.targetDisplayName, horizonsCenter, 
-            startEpochPadded - Time( 600 ), endEpochPadded + Time( 600 ), config.horizonsStepSize )
-            .getCartesianStateHistory( config.globalFrameOrientation );
+
+    auto horizonsStateHistory = HorizonsQuery( config.targetDisplayName,
+                                               horizonsCenter,
+                                               startEpochPadded - 300,
+                                               endEpochPadded + 300,
+                                               config.horizonsStepSize )
+                                        .getCartesianStateHistory( config.globalFrameOrientation );
     std::cout << "Retrieved " << horizonsStateHistory.size( ) << " ephemeris points" << std::endl;
 
     // =========================================================================
     // Set up simulation environment
     // =========================================================================
 
-    SystemOfBodies bodies = createSimulationEnvironment( config );
-    auto udlObservations = setupGroundStations( bodies, UDL );
-    createSpacecraftBody( bodies, config, horizonsStateHistory );
+    SystemOfBodies simulationBodies = createSimulationEnvironment( config );
+    auto simulationUdlObservations = setupGroundStations( simulationBodies, UDL );
+    createSpacecraftBody( simulationBodies, config, horizonsStateHistory );
 
     // =========================================================================
     // Extract true initial state
     // =========================================================================
+    // Create tabulated ephemeris from data
+    auto tabulatedEphemerisSettings =
+            std::make_shared< TabulatedEphemerisSettings >( horizonsStateHistory, config.globalFrameOrigin, config.globalFrameOrientation );
+    auto tabulatedEphemeris = createBodyEphemeris< double, double >( tabulatedEphemerisSettings, config.targetName );
 
-    double estimationStartEpoch = static_cast< double >( startEpochPadded );
-    auto it = horizonsStateHistory.lower_bound( estimationStartEpoch );
-    if( it == horizonsStateHistory.end( ) ) it = std::prev( horizonsStateHistory.end( ) );
-    else if( it != horizonsStateHistory.begin( ) )
-    {
-        auto prev = std::prev( it );
-        if( std::abs( prev->first - estimationStartEpoch ) < std::abs( it->first - estimationStartEpoch ) )
-            it = prev;
-    }
+    // Get initial state at padded epoch for propagation (needed for light-time calculations)
+    Eigen::Vector6d trueInitialStatePadded = tabulatedEphemeris->getCartesianState( startEpochPadded );
+    // Also get initial state at observation start epoch for comparison
+    Eigen::Vector6d trueInitialState = tabulatedEphemeris->getCartesianState( startEpoch );
 
-    Eigen::Vector6d trueInitialState = it->second;
-    double trueInitialEpoch = it->first;
-
-    std::cout << "\nTRUE initial state from Horizons:" << std::endl;
-    std::cout << "  Epoch: " << horizons_interface::secondsToIsoDate( trueInitialEpoch ) << " TDB" << std::endl;
+    std::cout << "\nTRUE initial state from Horizons (at observation start):" << std::endl;
+    std::cout << "  Epoch: " << horizons_interface::secondsToIsoDate( startEpoch ) << " TDB" << std::endl;
     std::cout << "  Position (km): [" << trueInitialState.head< 3 >( ).transpose( ) / 1e3 << "]" << std::endl;
     std::cout << "  Velocity (km/s): [" << trueInitialState.tail< 3 >( ).transpose( ) / 1e3 << "]" << std::endl;
 
@@ -867,51 +863,47 @@ int main( int argc, char** argv )
 
     // Set up acceleration model for verification (same as estimation)
     SelectedAccelerationMap verifyAccelerationSettings;
-    
-    verifyAccelerationSettings[ config.targetName ][ "Earth" ].push_back( 
-            std::make_shared< SphericalHarmonicAccelerationSettings >( 
-                    config.earthSphericalHarmonicsDegree, config.earthSphericalHarmonicsOrder ) );
-    verifyAccelerationSettings[ config.targetName ][ "Moon" ].push_back( 
-            std::make_shared< SphericalHarmonicAccelerationSettings >( 
-                    config.moonSphericalHarmonicsDegree, config.moonSphericalHarmonicsOrder ) );
-    
+    verifyAccelerationSettings[ config.targetName ][ "Earth" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
+    verifyAccelerationSettings[ config.targetName ][ "Moon" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
     verifyAccelerationSettings[ config.targetName ][ "Sun" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
-    verifyAccelerationSettings[ config.targetName ][ "Mercury" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
+    verifyAccelerationSettings[ config.targetName ][ "Mercury" ].push_back(
+            std::make_shared< AccelerationSettings >( point_mass_gravity ) );
     verifyAccelerationSettings[ config.targetName ][ "Venus" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
     verifyAccelerationSettings[ config.targetName ][ "Mars" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
-    verifyAccelerationSettings[ config.targetName ][ "Jupiter" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
+    verifyAccelerationSettings[ config.targetName ][ "Jupiter" ].push_back(
+            std::make_shared< AccelerationSettings >( point_mass_gravity ) );
     verifyAccelerationSettings[ config.targetName ][ "Saturn" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
-    
+
     verifyAccelerationSettings[ config.targetName ][ "Sun" ].push_back( radiationPressureAcceleration( ) );
 
-    verifyAccelerationSettings[ config.targetName ][ "Sun" ].push_back( 
+    verifyAccelerationSettings[ config.targetName ][ "Sun" ].push_back(
             std::make_shared< RelativisticAccelerationCorrectionSettings >( true, false, false ) );
-    verifyAccelerationSettings[ config.targetName ][ "Earth" ].push_back( 
+    verifyAccelerationSettings[ config.targetName ][ "Earth" ].push_back(
             std::make_shared< RelativisticAccelerationCorrectionSettings >( true, false, false ) );
-    verifyAccelerationSettings[ config.targetName ][ "Moon" ].push_back( 
+    verifyAccelerationSettings[ config.targetName ][ "Moon" ].push_back(
             std::make_shared< RelativisticAccelerationCorrectionSettings >( true, false, false ) );
 
     AccelerationMap verifyAccelerationModelMap =
-            createAccelerationModelsMap( bodies, verifyAccelerationSettings, { config.targetName }, { config.globalFrameOrigin } );
+            createAccelerationModelsMap( simulationBodies, verifyAccelerationSettings, { config.targetName }, { config.globalFrameOrigin } );
 
     std::shared_ptr< IntegratorSettings< double > > verifyIntegratorSettings =
-            std::make_shared< RungeKuttaFixedStepSizeSettings< double > >( config.integratorStepSize, CoefficientSets::rungeKuttaFehlberg78 );
+            std::make_shared< RungeKuttaFixedStepSizeSettings< double > >( config.integratorStepSize,
+                                                                           CoefficientSets::rungeKuttaFehlberg78 );
 
-    double verifyEndEpoch = static_cast< double >( endEpochPadded );
-
+    // Propagate from padded start to padded end to cover light-time calculations
     std::shared_ptr< TranslationalStatePropagatorSettings< double > > verifyPropagatorSettings =
             std::make_shared< TranslationalStatePropagatorSettings< double > >(
                     std::vector< std::string >{ config.globalFrameOrigin },
                     verifyAccelerationModelMap,
                     std::vector< std::string >{ config.targetName },
-                    trueInitialState,  // Use unperturbed Horizons state
-                    trueInitialEpoch,
+                    trueInitialStatePadded,  // Use state at padded epoch
+                    startEpochPadded,
                     verifyIntegratorSettings,
-                    std::make_shared< PropagationTimeTerminationSettings >( verifyEndEpoch ) );
+                    std::make_shared< PropagationTimeTerminationSettings >( endEpochPadded, true ) );
 
     // Run propagation
-    SingleArcDynamicsSimulator< double > verifySimulator( bodies, verifyPropagatorSettings );
-    
+    SingleArcDynamicsSimulator< double > verifySimulator( simulationBodies, verifyPropagatorSettings );
+
     std::map< double, Eigen::VectorXd > propagatedStates = verifySimulator.getEquationsOfMotionNumericalSolution( );
 
     // Compare propagated states to Horizons ephemeris
@@ -921,26 +913,12 @@ int main( int argc, char** argv )
     double maxVelError = 0.0;
     int comparisonCount = 0;
 
-    for( const auto& [epoch, state] : propagatedStates )
+    for( const auto& [ epoch, state ] : propagatedStates )
     {
-        // Find closest Horizons point
-        auto hIt = horizonsStateHistory.lower_bound( epoch );
-        if( hIt == horizonsStateHistory.end( ) )
-            continue;
-        if( hIt != horizonsStateHistory.begin( ) )
-        {
-            auto prev = std::prev( hIt );
-            if( std::abs( prev->first - epoch ) < std::abs( hIt->first - epoch ) )
-                hIt = prev;
-        }
+        auto trueState = tabulatedEphemeris->getCartesianState( epoch );
 
-        // Only compare if within 60 seconds of a Horizons point
-        if( std::abs( hIt->first - epoch ) > 60.0 )
-            continue;
-
-        Eigen::Vector6d horizonsState = hIt->second;
-        Eigen::Vector3d posError = state.head< 3 >( ) - horizonsState.head< 3 >( );
-        Eigen::Vector3d velError = state.segment< 3 >( 3 ) - horizonsState.tail< 3 >( );
+        Eigen::Vector3d posError = state.head< 3 >( ) - trueState.head< 3 >( );
+        Eigen::Vector3d velError = state.segment< 3 >( 3 ) - trueState.tail< 3 >( );
 
         double posErrorNorm = posError.norm( );
         double velErrorNorm = velError.norm( );
@@ -976,15 +954,32 @@ int main( int argc, char** argv )
     // Create observation settings and get observations
     // =========================================================================
 
-    auto [ modelSettings, simSettings ] = createObservationSettings( config, udlObservations, observationTimesDouble );
-
-    auto observations = getObservations( config, UDL, bodies, modelSettings, simSettings );
+    auto [ modelSettings, simSettings ] = createObservationSettings( config, simulationUdlObservations, observationTimesDouble );
+    
+    // Use propagated trajectory for observation simulation (not Horizons) to ensure consistency
+    // This way, zero perturbation should give zero residual
+    std::map< double, Eigen::Vector6d > propagatedStatesMap;
+    for( const auto& [ epoch, state ] : propagatedStates )
+    {
+        propagatedStatesMap[ epoch ] = state;
+    }
+    
+    auto propagatedEphemerisSettings = std::make_shared< TabulatedEphemerisSettings >( 
+            propagatedStatesMap, config.globalFrameOrigin, config.globalFrameOrientation );
+    auto propagatedEphemeris = createBodyEphemeris< double, double >( propagatedEphemerisSettings, config.targetName );
+    simulationBodies.getBody( config.targetName )->setEphemeris( propagatedEphemeris );
+    
+    auto observations = getObservations( config, UDL, simulationBodies, modelSettings, simSettings );
 
     // =========================================================================
     // Set up parameter estimation
     // =========================================================================
 
     std::cout << "\n=== Setting up state estimation ===" << std::endl;
+
+    SystemOfBodies estimationBodies = createSimulationEnvironment( config );
+    auto udlObservations = setupGroundStations( estimationBodies, UDL );
+    createSpacecraftBody( estimationBodies, config, horizonsStateHistory );
 
     Eigen::Vector6d statePerturbation;
     statePerturbation << config.positionPerturbation, config.velocityPerturbation;
@@ -996,15 +991,11 @@ int main( int argc, char** argv )
 
     // Define acceleration models
     SelectedAccelerationMap accelerationSettings;
-    
+
     // Spherical harmonics for Earth and Moon
-    accelerationSettings[ config.targetName ][ "Earth" ].push_back( 
-            std::make_shared< SphericalHarmonicAccelerationSettings >( 
-                    config.earthSphericalHarmonicsDegree, config.earthSphericalHarmonicsOrder ) );
-    accelerationSettings[ config.targetName ][ "Moon" ].push_back( 
-            std::make_shared< SphericalHarmonicAccelerationSettings >( 
-                    config.moonSphericalHarmonicsDegree, config.moonSphericalHarmonicsOrder ) );
-    
+    accelerationSettings[ config.targetName ][ "Earth" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
+    accelerationSettings[ config.targetName ][ "Moon" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
+
     // Point mass gravity from Sun and planets
     accelerationSettings[ config.targetName ][ "Sun" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
     accelerationSettings[ config.targetName ][ "Mercury" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
@@ -1012,48 +1003,51 @@ int main( int argc, char** argv )
     accelerationSettings[ config.targetName ][ "Mars" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
     accelerationSettings[ config.targetName ][ "Jupiter" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
     accelerationSettings[ config.targetName ][ "Saturn" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
-    
+
     // Solar radiation pressure from Sun
     accelerationSettings[ config.targetName ][ "Sun" ].push_back( radiationPressureAcceleration( ) );
 
     // Relativistic corrections (Schwarzschild) from Sun, Earth, and Moon
-    accelerationSettings[ config.targetName ][ "Sun" ].push_back( 
+    accelerationSettings[ config.targetName ][ "Sun" ].push_back(
             std::make_shared< RelativisticAccelerationCorrectionSettings >( true, false, false ) );
-    accelerationSettings[ config.targetName ][ "Earth" ].push_back( 
+    accelerationSettings[ config.targetName ][ "Earth" ].push_back(
             std::make_shared< RelativisticAccelerationCorrectionSettings >( true, false, false ) );
-    accelerationSettings[ config.targetName ][ "Moon" ].push_back( 
+    accelerationSettings[ config.targetName ][ "Moon" ].push_back(
             std::make_shared< RelativisticAccelerationCorrectionSettings >( true, false, false ) );
 
     std::cout << "Acceleration model:" << std::endl;
-    std::cout << "  Earth: spherical harmonics (" << config.earthSphericalHarmonicsDegree << "x" << config.earthSphericalHarmonicsOrder << ") + Schwarzschild" << std::endl;
-    std::cout << "  Moon: spherical harmonics (" << config.moonSphericalHarmonicsDegree << "x" << config.moonSphericalHarmonicsOrder << ") + Schwarzschild" << std::endl;
+    std::cout << "  Earth: Point mass + Schwarzschild" << std::endl;
+    std::cout << "  Moon: spherical harmonics (" << config.moonSphericalHarmonicsDegree << "x" << config.moonSphericalHarmonicsOrder
+              << ") + Schwarzschild" << std::endl;
     std::cout << "  Point masses: Sun, Mercury, Venus, Mars, Jupiter, Saturn" << std::endl;
     std::cout << "  SRP from Sun" << std::endl;
     std::cout << "  Relativistic (Schwarzschild): Sun, Earth, Moon" << std::endl;
 
     AccelerationMap accelerationModelMap =
-            createAccelerationModelsMap( bodies, accelerationSettings, { config.targetName }, { config.globalFrameOrigin } );
+            createAccelerationModelsMap( estimationBodies, accelerationSettings, { config.targetName }, { config.globalFrameOrigin } );
 
-    std::shared_ptr< IntegratorSettings< double > > integratorSettings =
-            std::make_shared< RungeKuttaFixedStepSizeSettings< double > >( config.integratorStepSize, CoefficientSets::rungeKuttaFehlberg78 );
+    std::shared_ptr< IntegratorSettings< double > > integratorSettings = std::make_shared< RungeKuttaFixedStepSizeSettings< double > >(
+            config.integratorStepSize, CoefficientSets::rungeKuttaFehlberg78 );
 
-    double propagationEndEpoch = static_cast< double >( endEpochPadded );
+    // Use padded epochs to ensure ephemeris covers light-time iterations
+    // (observation models need to look back in time from observation epoch)
+    Eigen::Vector6d perturbedInitialStatePadded = tabulatedEphemeris->getCartesianState( startEpochPadded ) + statePerturbation;
 
     std::shared_ptr< TranslationalStatePropagatorSettings< double > > propagatorSettings =
             std::make_shared< TranslationalStatePropagatorSettings< double > >(
                     std::vector< std::string >{ config.globalFrameOrigin },
                     accelerationModelMap,
                     std::vector< std::string >{ config.targetName },
-                    perturbedInitialState,
-                    trueInitialEpoch,
+                    perturbedInitialStatePadded,
+                    startEpochPadded,
                     integratorSettings,
-                    std::make_shared< PropagationTimeTerminationSettings >( propagationEndEpoch ) );
+                    std::make_shared< PropagationTimeTerminationSettings >( endEpochPadded, true ) );
 
     std::vector< std::shared_ptr< EstimatableParameterSettings > > parameterSettings =
-            getInitialStateParameterSettings< double, double >( propagatorSettings, bodies );
+            getInitialStateParameterSettings< double, double >( propagatorSettings, estimationBodies );
 
     std::shared_ptr< EstimatableParameterSet< double > > parametersToEstimate =
-            createParametersToEstimate< double >( parameterSettings, bodies );
+            createParametersToEstimate< double >( parameterSettings, estimationBodies );
 
     std::cout << "Parameters: " << parametersToEstimate->getEstimatedParameterSetSize( ) << std::endl;
 
@@ -1063,7 +1057,7 @@ int main( int argc, char** argv )
 
     std::cout << "\n=== Propagating perturbed trajectory ===" << std::endl;
 
-    SingleArcDynamicsSimulator< double > perturbedSimulator( bodies, propagatorSettings );
+    SingleArcDynamicsSimulator< double > perturbedSimulator( estimationBodies, propagatorSettings );
     auto perturbedResults = perturbedSimulator.getSingleArcPropagationResults( );
     std::cout << "Perturbed trajectory: " << perturbedResults->getEquationsOfMotionNumericalSolution( ).size( ) << " points" << std::endl;
 
@@ -1074,13 +1068,13 @@ int main( int argc, char** argv )
     std::cout << "\n=== Running state estimation ===" << std::endl;
 
     OrbitDeterminationManager< double, double > orbitDeterminationManager(
-            bodies, parametersToEstimate, modelSettings, propagatorSettings );
+            estimationBodies, parametersToEstimate, modelSettings, propagatorSettings );
 
-    std::shared_ptr< EstimationInput< double, double > > estimationInput =
-            std::make_shared< EstimationInput< double, double > >(
-                    observations,
-                    Eigen::MatrixXd::Zero( 0, 0 ),
-                    std::make_shared< EstimationConvergenceChecker >( config.maxIterations, config.convergenceThreshold, 0.0, config.minIterations ) );
+    std::shared_ptr< EstimationInput< double, double > > estimationInput = std::make_shared< EstimationInput< double, double > >(
+            observations,
+            Eigen::MatrixXd::Zero( 0, 0 ),
+            std::make_shared< EstimationConvergenceChecker >(
+                    config.maxIterations, config.convergenceThreshold, 0.0, config.minIterations ) );
 
     estimationInput->defineEstimationSettings( true, true, true, true, true, false );
 
@@ -1098,12 +1092,13 @@ int main( int argc, char** argv )
     Eigen::Vector6d estimatedState = estimationOutput->parameterEstimate_.head< 6 >( );
     Eigen::VectorXd formalErrors = estimationOutput->getFormalErrorVector( );
 
-    Eigen::Vector3d positionError = estimatedState.head< 3 >( ) - trueInitialState.head< 3 >( );
-    Eigen::Vector3d velocityError = estimatedState.tail< 3 >( ) - trueInitialState.tail< 3 >( );
+    // Compare to true state at the padded epoch (same epoch as estimated state)
+    Eigen::Vector3d positionError = estimatedState.head< 3 >( ) - trueInitialStatePadded.head< 3 >( );
+    Eigen::Vector3d velocityError = estimatedState.tail< 3 >( ) - trueInitialStatePadded.tail< 3 >( );
 
     std::cout << std::setprecision( 6 );
-    std::cout << "\nTRUE state:      Pos (km): [" << trueInitialState.head< 3 >( ).transpose( ) / 1e3 << "]" << std::endl;
-    std::cout << "                 Vel (km/s): [" << trueInitialState.tail< 3 >( ).transpose( ) / 1e3 << "]" << std::endl;
+    std::cout << "\nTRUE state:      Pos (km): [" << trueInitialStatePadded.head< 3 >( ).transpose( ) / 1e3 << "]" << std::endl;
+    std::cout << "                 Vel (km/s): [" << trueInitialStatePadded.tail< 3 >( ).transpose( ) / 1e3 << "]" << std::endl;
     std::cout << "\nEstimated state: Pos (km): [" << estimatedState.head< 3 >( ).transpose( ) / 1e3 << "]" << std::endl;
     std::cout << "                 Vel (km/s): [" << estimatedState.tail< 3 >( ).transpose( ) / 1e3 << "]" << std::endl;
     std::cout << "\nPosition error: " << positionError.norm( ) << " m" << std::endl;
@@ -1112,7 +1107,8 @@ int main( int argc, char** argv )
     double positionRecovery = ( 1.0 - positionError.norm( ) / statePerturbation.head< 3 >( ).norm( ) ) * 100.0;
     double velocityRecovery = ( 1.0 - velocityError.norm( ) / statePerturbation.tail< 3 >( ).norm( ) ) * 100.0;
 
-    std::cout << "\nRecovery: Position " << std::setprecision( 2 ) << positionRecovery << "%, Velocity " << velocityRecovery << "%" << std::endl;
+    std::cout << "\nRecovery: Position " << std::setprecision( 2 ) << positionRecovery << "%, Velocity " << velocityRecovery << "%"
+              << std::endl;
 
     Eigen::VectorXd finalResiduals = estimationOutput->residuals_;
     double rmsResidual = std::sqrt( finalResiduals.squaredNorm( ) / finalResiduals.size( ) );
@@ -1125,17 +1121,18 @@ int main( int argc, char** argv )
     std::cout << "\n=== Propagating corrected trajectory ===" << std::endl;
 
     // Create new propagator settings with estimated initial state
+    // Note: estimated state is at startEpochPadded, propagate to endEpochPadded
     std::shared_ptr< TranslationalStatePropagatorSettings< double > > correctedPropagatorSettings =
             std::make_shared< TranslationalStatePropagatorSettings< double > >(
                     std::vector< std::string >{ config.globalFrameOrigin },
                     accelerationModelMap,
                     std::vector< std::string >{ config.targetName },
                     estimatedState,
-                    trueInitialEpoch,
+                    startEpochPadded,
                     integratorSettings,
-                    std::make_shared< PropagationTimeTerminationSettings >( propagationEndEpoch ) );
+                    std::make_shared< PropagationTimeTerminationSettings >( endEpochPadded ) );
 
-    SingleArcDynamicsSimulator< double > correctedSimulator( bodies, correctedPropagatorSettings );
+    SingleArcDynamicsSimulator< double > correctedSimulator( estimationBodies, correctedPropagatorSettings );
     auto correctedResults = correctedSimulator.getSingleArcPropagationResults( );
     std::cout << "Corrected trajectory: " << correctedResults->getEquationsOfMotionNumericalSolution( ).size( ) << " points" << std::endl;
 
@@ -1159,28 +1156,24 @@ int main( int argc, char** argv )
 
     // 1. Save Horizons reference trajectory (raw map, not from simulator)
     {
-        HighFive::Group trajGroup = file.exist( "/Trajectories" ) 
-            ? file.getGroup( "/Trajectories" )
-            : file.createGroup( "/Trajectories" );
-        
+        HighFive::Group trajGroup = file.exist( "/Trajectories" ) ? file.getGroup( "/Trajectories" ) : file.createGroup( "/Trajectories" );
+
         HighFive::Group horizonsGroup = trajGroup.createGroup( "Horizons" );
-        
+
         std::vector< double > times;
         std::vector< std::vector< double > > states;
         times.reserve( horizonsStateHistory.size( ) );
         states.reserve( horizonsStateHistory.size( ) );
-        
-        for( const auto& [t, state] : horizonsStateHistory )
+
+        for( const auto& [ t, state ] : horizonsStateHistory )
         {
             times.push_back( t );
             states.push_back( { state( 0 ), state( 1 ), state( 2 ), state( 3 ), state( 4 ), state( 5 ) } );
         }
-        
-        horizonsGroup.createDataSet< double >( "times", HighFive::DataSpace( { times.size( ) } ) )
-                     .write( times );
-        horizonsGroup.createDataSet< double >( "states", HighFive::DataSpace( { states.size( ), 6 } ) )
-                     .write( states );
-        
+
+        horizonsGroup.createDataSet< double >( "times", HighFive::DataSpace( { times.size( ) } ) ).write( times );
+        horizonsGroup.createDataSet< double >( "states", HighFive::DataSpace( { states.size( ), 6 } ) ).write( states );
+
         // Add trajectory config for XDMF generation
         TrajectoryConfig horizonsConfig;
         horizonsConfig.bodyName = "Horizons";
@@ -1190,14 +1183,14 @@ int main( int argc, char** argv )
         horizonsConfig.numTimeSteps = times.size( );
         horizonsConfig.stateSize = 6;
         hdf5File.addTrajectoryConfig( horizonsConfig );
-        
+
         std::cout << "  Horizons: " << times.size( ) << " points" << std::endl;
     }
 
     // 2. Save unperturbed trajectory (from verification propagation)
-    hdf5File.addSingleArcResults( verifySimulator.getSingleArcPropagationResults( ), 
-                                   "Unperturbed", "/Trajectories" );
-    std::cout << "  Unperturbed: " << verifySimulator.getSingleArcPropagationResults( )->getEquationsOfMotionNumericalSolution( ).size( ) << " points" << std::endl;
+    hdf5File.addSingleArcResults( verifySimulator.getSingleArcPropagationResults( ), "Unperturbed", "/Trajectories" );
+    std::cout << "  Unperturbed: " << verifySimulator.getSingleArcPropagationResults( )->getEquationsOfMotionNumericalSolution( ).size( )
+              << " points" << std::endl;
 
     // 3. Save perturbed trajectory
     hdf5File.addSingleArcResults( perturbedResults, "Perturbed", "/Trajectories" );
@@ -1217,7 +1210,7 @@ int main( int argc, char** argv )
     // =========================================================================
     // Save estimation results as custom datasets
     // =========================================================================
-    
+
     // Create estimation results group
     if( !file.exist( "/EstimationResults" ) )
     {
@@ -1226,9 +1219,9 @@ int main( int argc, char** argv )
     HighFive::Group estGroup = file.getGroup( "/EstimationResults" );
 
     // Save vectors as datasets
-    std::vector< double > trueStateVec( trueInitialState.data( ), trueInitialState.data( ) + 6 );
+    std::vector< double > trueStateVec( trueInitialStatePadded.data( ), trueInitialStatePadded.data( ) + 6 );
     std::vector< double > estStateVec( estimatedState.data( ), estimatedState.data( ) + 6 );
-    std::vector< double > perturbedStateVec( perturbedInitialState.data( ), perturbedInitialState.data( ) + 6 );
+    std::vector< double > perturbedStateVec( perturbedInitialStatePadded.data( ), perturbedInitialStatePadded.data( ) + 6 );
     std::vector< double > formalErrorsVec( formalErrors.data( ), formalErrors.data( ) + formalErrors.size( ) );
     std::vector< double > residualsVec( finalResiduals.data( ), finalResiduals.data( ) + finalResiduals.size( ) );
 
@@ -1239,7 +1232,7 @@ int main( int argc, char** argv )
     estGroup.createDataSet( "residuals", residualsVec );
 
     // Save scalar results as attributes
-    estGroup.createAttribute( "true_initial_epoch", trueInitialEpoch );
+    estGroup.createAttribute( "true_initial_epoch", startEpochPadded );
     estGroup.createAttribute( "position_error_m", positionError.norm( ) );
     estGroup.createAttribute( "velocity_error_ms", velocityError.norm( ) );
     estGroup.createAttribute( "position_recovery_percent", positionRecovery );
@@ -1279,7 +1272,7 @@ int main( int argc, char** argv )
 
     // Write header info as comments
     csvFile << "# Estimation Output\n";
-    csvFile << "# True initial epoch: " << trueInitialEpoch << "\n";
+    csvFile << "# True initial epoch: " << startEpoch << "\n";
     csvFile << "# Number of iterations: " << estimationOutput->residualHistory_.size( ) << "\n";
     csvFile << "# Best iteration: " << estimationOutput->bestIteration_ << "\n";
     csvFile << "# Final RMS residual: " << rmsResidual << "\n";
@@ -1303,13 +1296,13 @@ int main( int argc, char** argv )
     // Write residual history (RMS per iteration)
     csvFile << "# Residual History (full residual vectors per iteration)\n";
     csvFile << "# Each row: iteration, residual_0, residual_1, ..., residual_n\n";
-    
+
     // First write the number of residuals per iteration
     if( !estimationOutput->residualHistory_.empty( ) )
     {
         csvFile << "# Residuals per iteration: " << estimationOutput->residualHistory_[ 0 ].size( ) << "\n";
     }
-    
+
     // Write residual data
     for( size_t i = 0; i < estimationOutput->residualHistory_.size( ); ++i )
     {

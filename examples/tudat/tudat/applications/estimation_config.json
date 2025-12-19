@@ -15,7 +15,7 @@
     
     "time": {
         "start_date": "2025-10-11T16:41:21.772479857",
-        "end_date": "2025-10-11T17:00:10.772479857",
+        "end_date": "2025-10-13T17:00:10.772479857",
         "timestep": 100.0,
         "ephemeris_padding": 1800.0,
         "horizons_step_size": "1m"
@@ -28,7 +28,7 @@
     ],
     
     "estimation": {
-        "position_perturbation": [10000.0, 0.0, 0.0],
+        "position_perturbation": [10.0, 0.0, 0.0],
         "velocity_perturbation": [1.0, 0.0, 0.0],
         "max_iterations": 20,
         "convergence_threshold": 1e-10,

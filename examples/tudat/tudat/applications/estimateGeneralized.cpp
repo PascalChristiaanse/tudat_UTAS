@@ -168,10 +168,9 @@ void createSpacecraftBody( SystemOfBodies& bodies,
 
 std::pair< std::vector< std::shared_ptr< ObservationModelSettings > >,
            std::vector< std::shared_ptr< ObservationSimulationSettings< double > > > >
-createObservationSettings(
-        const EstimationConfig& config,
-        std::shared_ptr< ObservationCollection< double, Time > > udlObservations,
-        const std::vector< double >& observationTimes );
+createObservationSettings( const EstimationConfig& config,
+                           std::shared_ptr< ObservationCollection< double, Time > > udlObservations,
+                           const std::vector< double >& observationTimes );
 
 std::shared_ptr< ObservationCollection< double, double > > getObservations(
         const EstimationConfig& config,
@@ -508,18 +507,23 @@ SystemOfBodies createSimulationEnvironment( const EstimationConfig& config )
     BodyListSettings bodySettings = getDefaultBodySettings( bodiesToCreate, config.globalFrameOrigin, config.globalFrameOrientation );
 
     // Configure Earth rotation model for ground station positions
-    bodySettings.get( "Earth" )->rotationModelSettings =
-            gcrsToItrsRotationModelSettings( tudat::basic_astrodynamics::iau_2006, config.globalFrameOrientation, nullptr, nullptr,
-            nullptr );
+    bodySettings.get( "Earth" )->rotationModelSettings = gcrsToItrsRotationModelSettings(
+            tudat::basic_astrodynamics::iau_2006, config.globalFrameOrientation, nullptr, nullptr, nullptr );
     bodySettings.get( "Earth" )->shapeModelSettings = simulation_setup::fromSpiceOblateSphericalBodyShapeSettings( );
 
     // Configure spherical harmonics gravity for Earth
-    // bodySettings.get( "Earth" )->gravityFieldSettings =
-    //         std::make_shared< FromFileSphericalHarmonicsGravityFieldSettings >( goco05c, config.earthSphericalHarmonicsDegree );
-
+    bodySettings.get( "Earth" )->gravityFieldSettings =
+    std::make_shared< FromFileSphericalHarmonicsGravityFieldSettings >( goco05c, config.earthSphericalHarmonicsDegree );
+    
     // Configure spherical harmonics gravity for Moon
     bodySettings.get( "Moon" )->gravityFieldSettings =
-            std::make_shared< FromFileSphericalHarmonicsGravityFieldSettings >( lpe200, config.moonSphericalHarmonicsDegree );
+    std::make_shared< FromFileSphericalHarmonicsGravityFieldSettings >( gggrx1200, config.moonSphericalHarmonicsDegree );
+    
+
+    std::dynamic_pointer_cast< SphericalHarmonicsGravityFieldSettings >( bodySettings.at( "Earth" )->gravityFieldSettings )
+            ->resetAssociatedReferenceFrame( "ITRS" );
+    // std::dynamic_pointer_cast< SphericalHarmonicsGravityFieldSettings >( bodySettings.at( "Moon" )->gravityFieldSettings )
+    //         ->resetAssociatedReferenceFrame( "IAU_Moon" );
 
     // Note: Sun radiation source is automatically configured by getDefaultBodySettings()
 
@@ -595,10 +599,9 @@ void createSpacecraftBody( SystemOfBodies& bodies,
 
 std::pair< std::vector< std::shared_ptr< ObservationModelSettings > >,
            std::vector< std::shared_ptr< ObservationSimulationSettings< double > > > >
-createObservationSettings(
-        const EstimationConfig& config,
-        std::shared_ptr< ObservationCollection< double, Time > > udlObservations,
-        const std::vector< double >& observationTimes )
+createObservationSettings( const EstimationConfig& config,
+                           std::shared_ptr< ObservationCollection< double, Time > > udlObservations,
+                           const std::vector< double >& observationTimes )
 {
     std::cout << "Setting up observation models..." << std::endl;
 
@@ -775,8 +778,9 @@ int main( int argc, char** argv )
 
     std::vector< Time > observationTimesTime = generateObservationTimes( config );
     std::vector< double > observationTimesDouble( observationTimesTime.size( ) );
-    std::transform( observationTimesTime.begin( ), observationTimesTime.end( ), observationTimesDouble.begin( ),
-                    []( const Time& t ) { return static_cast< double >( t ); } );
+    std::transform( observationTimesTime.begin( ), observationTimesTime.end( ), observationTimesDouble.begin( ), []( const Time& t ) {
+        return static_cast< double >( t );
+    } );
 
     double startEpoch = *std::min_element( observationTimesDouble.begin( ), observationTimesDouble.end( ) );
     double endEpoch = *std::max_element( observationTimesDouble.begin( ), observationTimesDouble.end( ) );
@@ -821,12 +825,9 @@ int main( int argc, char** argv )
     }
     std::cout << "  Horizons center: " << horizonsCenter << " (frame origin: " << config.globalFrameOrigin << ")" << std::endl;
 
-    auto horizonsStateHistory = HorizonsQuery( config.targetDisplayName,
-                                               horizonsCenter,
-                                               startEpochPadded - 300,
-                                               endEpochPadded + 300,
-                                               config.horizonsStepSize )
-                                        .getCartesianStateHistory( config.globalFrameOrientation );
+    auto horizonsStateHistory =
+            HorizonsQuery( config.targetDisplayName, horizonsCenter, startEpochPadded - 300, endEpochPadded + 300, config.horizonsStepSize )
+                    .getCartesianStateHistory( config.globalFrameOrientation );
     std::cout << "Retrieved " << horizonsStateHistory.size( ) << " ephemeris points" << std::endl;
 
     // =========================================================================
@@ -863,8 +864,12 @@ int main( int argc, char** argv )
 
     // Set up acceleration model for verification (same as estimation)
     SelectedAccelerationMap verifyAccelerationSettings;
-    verifyAccelerationSettings[ config.targetName ][ "Earth" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
-    verifyAccelerationSettings[ config.targetName ][ "Moon" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
+    // Spherical harmonics for Earth and Moon
+    verifyAccelerationSettings[ config.targetName ][ "Earth" ].push_back( std::make_shared< SphericalHarmonicAccelerationSettings >(
+            config.earthSphericalHarmonicsDegree, config.earthSphericalHarmonicsOrder ) );
+    verifyAccelerationSettings[ config.targetName ][ "Moon" ].push_back( std::make_shared< SphericalHarmonicAccelerationSettings >(
+            config.moonSphericalHarmonicsDegree, config.moonSphericalHarmonicsOrder ) );
+
     verifyAccelerationSettings[ config.targetName ][ "Sun" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
     verifyAccelerationSettings[ config.targetName ][ "Mercury" ].push_back(
             std::make_shared< AccelerationSettings >( point_mass_gravity ) );
@@ -883,8 +888,8 @@ int main( int argc, char** argv )
     verifyAccelerationSettings[ config.targetName ][ "Moon" ].push_back(
             std::make_shared< RelativisticAccelerationCorrectionSettings >( true, false, false ) );
 
-    AccelerationMap verifyAccelerationModelMap =
-            createAccelerationModelsMap( simulationBodies, verifyAccelerationSettings, { config.targetName }, { config.globalFrameOrigin } );
+    AccelerationMap verifyAccelerationModelMap = createAccelerationModelsMap(
+            simulationBodies, verifyAccelerationSettings, { config.targetName }, { config.globalFrameOrigin } );
 
     std::shared_ptr< IntegratorSettings< double > > verifyIntegratorSettings =
             std::make_shared< RungeKuttaFixedStepSizeSettings< double > >( config.integratorStepSize,
@@ -955,7 +960,7 @@ int main( int argc, char** argv )
     // =========================================================================
 
     auto [ modelSettings, simSettings ] = createObservationSettings( config, simulationUdlObservations, observationTimesDouble );
-    
+
     // Use propagated trajectory for observation simulation (not Horizons) to ensure consistency
     // This way, zero perturbation should give zero residual
     std::map< double, Eigen::Vector6d > propagatedStatesMap;
@@ -963,12 +968,12 @@ int main( int argc, char** argv )
     {
         propagatedStatesMap[ epoch ] = state;
     }
-    
-    auto propagatedEphemerisSettings = std::make_shared< TabulatedEphemerisSettings >( 
-            propagatedStatesMap, config.globalFrameOrigin, config.globalFrameOrientation );
+
+    auto propagatedEphemerisSettings =
+            std::make_shared< TabulatedEphemerisSettings >( propagatedStatesMap, config.globalFrameOrigin, config.globalFrameOrientation );
     auto propagatedEphemeris = createBodyEphemeris< double, double >( propagatedEphemerisSettings, config.targetName );
     simulationBodies.getBody( config.targetName )->setEphemeris( propagatedEphemeris );
-    
+
     auto observations = getObservations( config, UDL, simulationBodies, modelSettings, simSettings );
 
     // =========================================================================
@@ -993,8 +998,10 @@ int main( int argc, char** argv )
     SelectedAccelerationMap accelerationSettings;
 
     // Spherical harmonics for Earth and Moon
-    accelerationSettings[ config.targetName ][ "Earth" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
-    accelerationSettings[ config.targetName ][ "Moon" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );
+    accelerationSettings[ config.targetName ][ "Earth" ].push_back( std::make_shared< SphericalHarmonicAccelerationSettings >(
+            config.earthSphericalHarmonicsDegree, config.earthSphericalHarmonicsOrder ) );
+    accelerationSettings[ config.targetName ][ "Moon" ].push_back( std::make_shared< SphericalHarmonicAccelerationSettings >(
+            config.moonSphericalHarmonicsDegree, config.moonSphericalHarmonicsOrder ) );
 
     // Point mass gravity from Sun and planets
     accelerationSettings[ config.targetName ][ "Sun" ].push_back( std::make_shared< AccelerationSettings >( point_mass_gravity ) );

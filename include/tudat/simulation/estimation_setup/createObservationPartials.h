@@ -581,11 +581,11 @@ public:
                                     "input object type is incompatible" );
                         }
                         else if( std::dynamic_pointer_cast< DirectObservationPartial< 1 > >( firstPartial )->getObservableType( ) !=
-                                 one_way_frequency_of_arrival )
+                                 one_way_doppler_measured_frequency )
                         {
                             throw std::runtime_error(
                                     "Error when creating differenced frequency of arrival partial; first "
-                                    "input observable type is incompatible (expected one_way_frequency_of_arrival)" );
+                                    "input observable type is incompatible (expected one_way_doppler_measured_frequency)" );
                         }
                     }
 
@@ -598,11 +598,11 @@ public:
                                     "input object type is incompatible" );
                         }
                         else if( std::dynamic_pointer_cast< DirectObservationPartial< 1 > >( secondPartial )->getObservableType( ) !=
-                                 one_way_frequency_of_arrival )
+                                 one_way_doppler_measured_frequency )
                         {
                             throw std::runtime_error(
                                     "Error when creating differenced frequency of arrival partial; second "
-                                    "input observable type is incompatible (expected one_way_frequency_of_arrival)" );
+                                    "input observable type is incompatible (expected one_way_doppler_measured_frequency)" );
                         }
                     }
                 }

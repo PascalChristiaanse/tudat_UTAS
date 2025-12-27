@@ -22,6 +22,7 @@
 #include "tudat/astro/observation_models/observationModel.h"
 #include "tudat/astro/observation_models/lightTimeSolution.h"
 #include "tudat/astro/earth_orientation/terrestrialTimeScaleConverter.h"
+#include "tudat/astro/observation_models/oneWayDopplerMeasuredFrequencyObservationModel.h"
 #include "tudat/astro/basic_astro/timeConversions.h"
 
 namespace tudat
@@ -37,39 +38,45 @@ public:
     typedef Eigen::Matrix< ObservationScalarType, 6, 1 > StateType;
     typedef Eigen::Matrix< ObservationScalarType, 3, 1 > PositionType;
 
-    using ObservationModel< 1, ObservationScalarType, TimeType >::frequencyInterpolator_;
     using ObservationModel< 1, ObservationScalarType, TimeType >::timeScaleConverter_;
+    using ObservationModel< 1, ObservationScalarType, TimeType >::frequencyInterpolator_;
 
     OneWayDifferencedFrequencyOfArrivalObservationModel(
             const LinkEnds& linkEnds,
-            const std::shared_ptr< observation_models::LightTimeCalculator< ObservationScalarType, TimeType > >
-                    firstReceiverLightTimeCalculator,
-            const std::shared_ptr< observation_models::LightTimeCalculator< ObservationScalarType, TimeType > >
-                    secondReceiverLightTimeCalculator,
+            const std::shared_ptr< OneWayDopplerMeasuredFrequencyObservationModel< ObservationScalarType, TimeType > > firstDopplerModel,
+            const std::shared_ptr< OneWayDopplerMeasuredFrequencyObservationModel< ObservationScalarType, TimeType > > secondDopplerModel,
             const std::shared_ptr< ObservationBias< 1 > > observationBiasCalculator = nullptr,
             const std::map< LinkEndType, std::shared_ptr< ground_stations::GroundStationState > >& stationStates =
                     std::map< LinkEndType, std::shared_ptr< ground_stations::GroundStationState > >( ),
             const basic_astrodynamics::TimeScales observableTimeScale = basic_astrodynamics::tdb_scale ):
         ObservationModel< 1, ObservationScalarType, TimeType >( differenced_frequency_of_arrival, linkEnds, observationBiasCalculator ),
-        firstReceiverLightTimeCalculator_( firstReceiverLightTimeCalculator ),
-        secondReceiverLightTimeCalculator_( secondReceiverLightTimeCalculator ), stationStates_( stationStates ),
+        firstDopplerModel_( firstDopplerModel ), secondDopplerModel_( secondDopplerModel ), stationStates_( stationStates ),
         observableTimeScale_( observableTimeScale )
     {
-        if( observableTimeScale_ == basic_astrodynamics::utc_scale || observableTimeScale_ == basic_astrodynamics::ut1_scale )
+        if( linkEnds.size() != 3 )
         {
-            if( stationStates.count( receiver ) == 0 )
+            throw std::runtime_error(
+                    "Error when creating differenced frequency of arrival observation model, exactly 3 link ends required" );
+        }
+        if( observableTimeScale_ != basic_astrodynamics::tdb_scale )
+        {
+            throw std::runtime_error(
+                    "Error when creating differenced frequency of arrival observation model, only TDB time scale is currently supported" );
+        }
+        if( firstDopplerModel_ == nullptr || secondDopplerModel_ == nullptr )
+        {
+            throw std::runtime_error(
+                    "Error when creating differenced frequency of arrival observation model, null doppler model pointer" );
+        }
+        if( firstDopplerModel_->frequencyInterpolator_ == nullptr || secondDopplerModel_->frequencyInterpolator_ == nullptr )
+        {
+            if( frequencyInterpolator_ == nullptr )
             {
                 throw std::runtime_error(
-                        "Error when making differenced frequency of arrival observation model, no state model found for receiver " +
-                        linkEnds.at( receiver ).bodyName_ + ", " + linkEnds.at( receiver ).stationName_ );
+                        "Error when creating differenced frequency of arrival observation model, no frequency interpolator found" );
             }
-
-            if( stationStates.count( receiver2 ) == 0 )
-            {
-                throw std::runtime_error(
-                        "Error when making differenced frequency of arrival observation model, no state model found for receiver2 " +
-                        linkEnds.at( receiver2 ).bodyName_ + ", " + linkEnds.at( receiver2 ).stationName_ );
-            }
+            firstDopplerModel_->setFrequencyInterpolator( frequencyInterpolator_ );
+            secondDopplerModel_->setFrequencyInterpolator( frequencyInterpolator_ );
         }
     }
 
@@ -83,145 +90,59 @@ public:
             std::vector< Eigen::Matrix< double, 6, 1 > >& linkEndStates,
             const std::shared_ptr< ObservationAncilliarySimulationSettings > ancilliarySetingsInput = nullptr )
     {
-        ObservationScalarType lightTimeForFirstReceiver;
-        ObservationScalarType lightTimeForSecondReceiver;
+        if( linkEndAssociatedWithTime == transmitter || linkEndAssociatedWithTime == receiver2 )
+        {
+            throw std::runtime_error(
+                    "Error when computing Differenced Frequency of Arrival observables: the selected "
+                    "reference link end (" +
+                    getLinkEndTypeString( linkEndAssociatedWithTime ) + ") is not valid. Must be the receiver." );
+        }
 
-        // Resize link end data vectors to 3 (Transmitter, two Receivers)
+        // Seperate link ends for both doppler models
+        LinkEnds firstDopplerLinkEnds;
+        firstDopplerLinkEnds[ transmitter ] = this->linkEnds_.at( transmitter );
+        firstDopplerLinkEnds[ receiver ] = this->linkEnds_.at( receiver );
+        LinkEnds secondDopplerLinkEnds;
+        secondDopplerLinkEnds[ transmitter ] = this->linkEnds_.at( transmitter );
+        secondDopplerLinkEnds[ receiver ] = this->linkEnds_.at( receiver2 );
+
+        // Compute both doppler observables
+        std::vector< double > firstLinkEndTimes, secondLinkEndTimes;
+        std::vector< Eigen::Matrix< double, 6, 1 > > firstLinkEndStates, secondLinkEndStates;
+        Eigen::Matrix< ObservationScalarType, 1, 1 > firstDopplerObservation = firstDopplerModel_->computeIdealObservationsWithLinkEndData(
+                time, linkEndAssociatedWithTime, firstLinkEndTimes, firstLinkEndStates, ancilliarySetingsInput );
+        Eigen::Matrix< ObservationScalarType, 1, 1 > secondDopplerObservation =
+                secondDopplerModel_->computeIdealObservationsWithLinkEndData(
+                        time, linkEndAssociatedWithTime, secondLinkEndTimes, secondLinkEndStates, ancilliarySetingsInput );
+        // Combine link end times and states
         linkEndTimes.resize( 3 );
+        linkEndTimes[ 0 ] = firstLinkEndTimes[ 0 ];
+        linkEndTimes[ 1 ] = firstLinkEndTimes[ 1 ];
+        linkEndTimes[ 2 ] = secondLinkEndTimes[ 1 ];
         linkEndStates.resize( 3 );
+        linkEndStates[ 0 ] = firstLinkEndStates[ 0 ];
+        linkEndStates[ 1 ] = firstLinkEndStates[ 1 ];
+        linkEndStates[ 2 ] = secondLinkEndStates[ 1 ];
 
-        StateType transmitterStateForFirstLink, receiverStateForFirstLink, transmitterStateForSecondLink, receiverStateForSecondLink;
-        TimeType fullPrecisionTimeAtReceiver2;
-        if( linkEndAssociatedWithTime == receiver )
-        {
-            // Calculate reception time at ground station at the start and end of the count interval at reception time.
-            linkEndTimes[ 1 ] = static_cast< double >( time );
+        // Compute differenced frequency of arrival observation
+        Eigen::Matrix< ObservationScalarType, 1, 1 > observation = firstDopplerObservation - secondDopplerObservation;
 
-            std::shared_ptr< ObservationAncilliarySimulationSettings > ancilliarySetings;
-            this->setFrequencyProperties( time, receiver, firstReceiverLightTimeCalculator_, ancilliarySetingsInput, ancilliarySetings );
-            lightTimeForFirstReceiver = firstReceiverLightTimeCalculator_->calculateLightTimeWithLinkEndsStates(
-                    receiverStateForFirstLink, transmitterStateForFirstLink, time, 1, ancilliarySetings );
-
-            linkEndTimes[ 0 ] = linkEndTimes[ 1 ] - static_cast< double >( lightTimeForFirstReceiver );
-
-            this->setFrequencyProperties( time, receiver, secondReceiverLightTimeCalculator_, ancilliarySetingsInput, ancilliarySetings );
-            lightTimeForSecondReceiver = secondReceiverLightTimeCalculator_->calculateLightTimeWithLinkEndsStates(
-                    receiverStateForSecondLink, transmitterStateForSecondLink, time - lightTimeForFirstReceiver, 0, ancilliarySetings );
-            fullPrecisionTimeAtReceiver2 = time - ( lightTimeForFirstReceiver - lightTimeForSecondReceiver );
-            linkEndTimes[ 2 ] = static_cast< double >( fullPrecisionTimeAtReceiver2 );
-        }
-        else
-        {
-            throw std::runtime_error( "Error in differenced frequency of arrival, reference link end not recognized" );
-        }
-
-        linkEndStates[ 0 ] = transmitterStateForFirstLink.template cast< double >( );
-        linkEndStates[ 1 ] = receiverStateForFirstLink.template cast< double >( );
-        linkEndStates[ 2 ] = receiverStateForSecondLink.template cast< double >( );
-
-        // ==================== FDOA COMPUTATION (FULL RELATIVISTIC) ====================
-
-        // Retrieve transmitter frequency - Require interpolator to be set
-        ObservationScalarType transmitterFrequency;
-
-        if( frequencyInterpolator_ == nullptr )
-        {
-            throw std::runtime_error( "Error in FDOA observation: no frequency interpolator has been set." );
-        }
-
-        // Convert time at transmitter to UTC for frequency interpolation as is required by the interpolator
-        TimeType timeAtTransmitter;
-        if( observableTimeScale_ != basic_astrodynamics::utc_scale )
-        {
-            timeAtTransmitter = timeScaleConverter_->template getCurrentTime< TimeType >( basic_astrodynamics::tdb_scale,
-                                                                                     basic_astrodynamics::utc_scale,
-                                                                                     linkEndTimes[ 0 ],
-                                                                                     transmitterStateForFirstLink.head( 3 ) );
-        }
-        else
-        {
-            timeAtTransmitter = linkEndTimes[ 0 ];
-        }
-        transmitterFrequency = frequencyInterpolator_->template getTemplatedCurrentFrequency< ObservationScalarType, TimeType >( timeAtTransmitter );
-
-        // Get speed of light
-        ObservationScalarType c = physical_constants::getSpeedOfLight< ObservationScalarType >( );
-
-        // Extract positions and velocities for all three link ends
-        PositionType r_t = transmitterStateForFirstLink.template head< 3 >( );  // Transmitter position
-        PositionType v_t = transmitterStateForFirstLink.template tail< 3 >( );  // Transmitter velocity
-
-        PositionType r_1 = receiverStateForFirstLink.template head< 3 >( );  // Receiver 1 position
-        PositionType v_1 = receiverStateForFirstLink.template tail< 3 >( );  // Receiver 1 velocity
-
-        PositionType r_2 = receiverStateForSecondLink.template head< 3 >( );  // Receiver 2 position
-        PositionType v_2 = receiverStateForSecondLink.template tail< 3 >( );  // Receiver 2 velocity
-
-        // Calculate position vectors from receivers to transmitter
-        PositionType rho_1 = r_t - r_1;  // Vector from receiver 1 to transmitter
-        PositionType rho_2 = r_t - r_2;  // Vector from receiver 2 to transmitter
-
-        // Calculate ranges and unit vectors
-        ObservationScalarType norm_rho_1 = rho_1.norm( );
-        ObservationScalarType norm_rho_2 = rho_2.norm( );
-
-        PositionType rho_1_hat = rho_1 / norm_rho_1;  // Unit vector receiver 1 → transmitter
-        PositionType rho_2_hat = rho_2 / norm_rho_2;  // Unit vector receiver 2 → transmitter
-
-        // Calculate relative velocities
-        PositionType v_rel_1 = v_t - v_1;  // Transmitter velocity relative to receiver 1
-        PositionType v_rel_2 = v_t - v_2;  // Transmitter velocity relative to receiver 2
-
-        // Calculate beta values (normalized line-of-sight velocity components)
-        // beta = (v · n̂) / c where positive means closing (approaching)
-        ObservationScalarType beta_1 = rho_1_hat.dot( v_rel_1 ) / c;
-        ObservationScalarType beta_2 = rho_2_hat.dot( v_rel_2 ) / c;
-
-        // Full relativistic Doppler formula (including time dilation)
-        // f_received / f_transmitted = sqrt((1 + beta) / (1 - beta))
-        // For FDOA, we compute the difference of these ratios
-
-        ObservationScalarType one_plus_beta_1 = mathematical_constants::getFloatingInteger< ObservationScalarType >( 1 ) + beta_1;
-        ObservationScalarType one_minus_beta_1 = mathematical_constants::getFloatingInteger< ObservationScalarType >( 1 ) - beta_1;
-        ObservationScalarType one_plus_beta_2 = mathematical_constants::getFloatingInteger< ObservationScalarType >( 1 ) + beta_2;
-        ObservationScalarType one_minus_beta_2 = mathematical_constants::getFloatingInteger< ObservationScalarType >( 1 ) - beta_2;
-
-        // Calculate Doppler ratios with full relativistic formula
-        ObservationScalarType doppler_ratio_1 = std::sqrt( one_plus_beta_1 / one_minus_beta_1 );
-        ObservationScalarType doppler_ratio_2 = std::sqrt( one_plus_beta_2 / one_minus_beta_2 );
-
-        // Compute fractional frequency difference (dimensionless)
-        // FDOA_fractional = (f_2 / f_tx) - (f_1 / f_tx) = doppler_ratio_2 - doppler_ratio_1
-        ObservationScalarType fdoa_fractional = doppler_ratio_2 - doppler_ratio_1;
-
-        // Scale by transmitter frequency to get absolute frequency difference in Hz
-        // FDOA [Hz] = f_tx [Hz] × FDOA_fractional
-        ObservationScalarType fdoa_hz = fdoa_fractional * transmitterFrequency;
-
-        // ==================== END FDOA COMPUTATION ====================
-
-        // Return absolute frequency difference in Hz
-        return ( Eigen::Matrix< ObservationScalarType, 1, 1 >( ) << fdoa_hz ).finished( );
+        return observation;
     }
 
-    //! Light time calculator to compute light time at the beginning of the integration time
-    std::shared_ptr< observation_models::LightTimeCalculator< ObservationScalarType, TimeType > > getFirstReceiverLightTimeCalculator( )
+    [[nodiscard]] auto getFirstDopplerMeasuredFrequencyModel( )
     {
-        return firstReceiverLightTimeCalculator_;
+        return firstDopplerModel_;
     }
 
-    //! Light time calculator to compute light time at the end of the integration time
-    std::shared_ptr< observation_models::LightTimeCalculator< ObservationScalarType, TimeType > > getSecondReceiverLightTimeCalculator( )
+    [[nodiscard]] auto getSecondDopplerMeasuredFrequencyModel( )
     {
-        return secondReceiverLightTimeCalculator_;
+        return secondDopplerModel_;
     }
 
 private:
-    //! Light time calculator to compute light time at the beginning of the integration time
-    std::shared_ptr< observation_models::LightTimeCalculator< ObservationScalarType, TimeType > > firstReceiverLightTimeCalculator_;
-
-    //! Light time calculator to compute light time at the end of the integration time
-    std::shared_ptr< observation_models::LightTimeCalculator< ObservationScalarType, TimeType > > secondReceiverLightTimeCalculator_;
+    const std::shared_ptr< OneWayDopplerMeasuredFrequencyObservationModel< ObservationScalarType, TimeType > > firstDopplerModel_;
+    const std::shared_ptr< OneWayDopplerMeasuredFrequencyObservationModel< ObservationScalarType, TimeType > > secondDopplerModel_;
 
     std::map< LinkEndType, std::shared_ptr< ground_stations::GroundStationState > > stationStates_;
 

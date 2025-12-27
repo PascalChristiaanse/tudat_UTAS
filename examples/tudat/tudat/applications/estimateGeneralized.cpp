@@ -673,9 +673,9 @@ createObservationSettings( const EstimationConfig& config,
                 std::string transmitterBody = linkEnds.at( transmitter ).bodyName_;
                 std::cout << "  Adding FDOA link: " << station1 << " - " << station2 << " (transmitter: " << transmitterBody << ")"
                           << std::endl;
-
-                auto fdoaModelSettings = std::make_shared< DifferencedFrequencyOfArrivalObservationSettings >(
-                        linkEnds, std::vector< std::shared_ptr< LightTimeCorrectionSettings > >( ) );
+                
+                
+                auto fdoaModelSettings = differencedFrequencyOfArrivalObservationSettings( linkEnds );
                 modelSettings.push_back( fdoaModelSettings );
 
                 auto fdoaSimSettings = std::make_shared< TabulatedObservationSimulationSettings< double > >(

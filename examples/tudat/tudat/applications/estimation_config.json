@@ -1,5 +1,5 @@
 {
-    "observation_types": [],
+    "observation_types": ["OWDMF"],
     "simulate_observations": true,
     
     "frame": {
@@ -31,7 +31,7 @@
         "position_perturbation": [10.0, 0.0, 0.0],
         "velocity_perturbation": [1.0, 0.0, 0.0],
         "max_iterations": 20,
-        "convergence_threshold": 1e-10,
+        "convergence_threshold": 1e-8,
         "min_iterations": 3,
         "integrator_step_size": 10.0
     },

@@ -56,6 +56,7 @@ struct EstimationConfig {
     bool useTDOA = true;
     bool useFDOA = false;
     bool useRange = false;
+    bool useOWDMF = false;  // One-way Doppler measured frequency
     bool simulateObservations = true;
 
     // Frame configuration
@@ -111,6 +112,7 @@ struct EstimationConfig {
         std::cout << "  - TDOA: " << useTDOA << std::endl;
         std::cout << "  - FDOA: " << useFDOA << std::endl;
         std::cout << "  - Range: " << useRange << std::endl;
+        std::cout << "  - OWDMF: " << useOWDMF << std::endl;
         std::cout << "  - Simulated: " << simulateObservations << std::endl;
         std::cout << "Frame:" << std::endl;
         std::cout << "  - Origin: " << globalFrameOrigin << std::endl;
@@ -194,6 +196,7 @@ void printUsage( const char* programName )
               << "  -t, --tdoa                  Enable TDOA observations\n"
               << "  -f, --fdoa                  Enable FDOA observations\n"
               << "  -r, --range                 Enable one-way range observations\n"
+              << "  -d, --owdmf                 Enable one-way Doppler measured frequency observations\n"
               << "  -o, --output <path>         Output HDF5 file path\n"
               << "  -p, --perturbation <x,y,z,vx,vy,vz>  Initial state perturbation\n"
               << "  -S, --step-size <seconds>   Integrator step size (default: 10.0)\n"
@@ -227,6 +230,7 @@ EstimationConfig loadConfigFromJson( const std::string& configPath )
         config.useTDOA = std::find( types.begin( ), types.end( ), "TDOA" ) != types.end( );
         config.useFDOA = std::find( types.begin( ), types.end( ), "FDOA" ) != types.end( );
         config.useRange = std::find( types.begin( ), types.end( ), "Range" ) != types.end( );
+        config.useOWDMF = std::find( types.begin( ), types.end( ), "OWDMF" ) != types.end( );
     }
     if( j.contains( "simulate_observations" ) )
     {
@@ -315,7 +319,7 @@ EstimationConfig parseCommandLineArgs( int argc, char** argv )
 {
     EstimationConfig config;
     std::string configFile;
-    bool tdoaSet = false, fdoaSet = false, rangeSet = false;
+    bool tdoaSet = false, fdoaSet = false, rangeSet = false, owdmfSet = false;
 
     static struct option longOptions[] = { { "help", no_argument, nullptr, 'h' },
                                            { "config", required_argument, nullptr, 'c' },
@@ -324,13 +328,14 @@ EstimationConfig parseCommandLineArgs( int argc, char** argv )
                                            { "tdoa", no_argument, nullptr, 't' },
                                            { "fdoa", no_argument, nullptr, 'f' },
                                            { "range", no_argument, nullptr, 'r' },
+                                           { "owdmf", no_argument, nullptr, 'd' },
                                            { "output", required_argument, nullptr, 'o' },
                                            { "perturbation", required_argument, nullptr, 'p' },
                                            { "step-size", required_argument, nullptr, 'S' },
                                            { nullptr, 0, nullptr, 0 } };
 
     int opt;
-    while( ( opt = getopt_long( argc, argv, "hc:satfro:p:S:", longOptions, nullptr ) ) != -1 )
+    while( ( opt = getopt_long( argc, argv, "hc:satfrdo:p:S:", longOptions, nullptr ) ) != -1 )
     {
         switch( opt )
         {
@@ -357,6 +362,10 @@ EstimationConfig parseCommandLineArgs( int argc, char** argv )
             case 'r':
                 config.useRange = true;
                 rangeSet = true;
+                break;
+            case 'd':
+                config.useOWDMF = true;
+                owdmfSet = true;
                 break;
             case 'o':
                 config.outputPath = optarg;
@@ -403,6 +412,7 @@ EstimationConfig parseCommandLineArgs( int argc, char** argv )
         bool cliTDOA = config.useTDOA;
         bool cliFDOA = config.useFDOA;
         bool cliRange = config.useRange;
+        bool cliOWDMF = config.useOWDMF;
 
         // Start with file config
         config = fileConfig;
@@ -432,6 +442,10 @@ EstimationConfig parseCommandLineArgs( int argc, char** argv )
         {
             config.useRange = cliRange;
         }
+        if( owdmfSet )
+        {
+            config.useOWDMF = cliOWDMF;
+        }
     }
 
     // Validate
@@ -445,9 +459,9 @@ EstimationConfig parseCommandLineArgs( int argc, char** argv )
         };
     }
 
-    if( !config.useTDOA && !config.useFDOA && !config.useRange )
+    if( !config.useTDOA && !config.useFDOA && !config.useRange && !config.useOWDMF )
     {
-        std::cerr << "Error: At least one observation type (TDOA, FDOA, or Range) must be enabled." << std::endl;
+        std::cerr << "Error: At least one observation type (TDOA, FDOA, Range, or OWDMF) must be enabled." << std::endl;
         std::exit( 1 );
     }
 
@@ -571,8 +585,8 @@ void createSpacecraftBody( SystemOfBodies& bodies,
     auto tabulatedEphemeris = createBodyEphemeris< double, double >( tabulatedEphemerisSettings, config.targetName );
     // bodies.at( config.targetName )->setEphemeris( tabulatedEphemeris );
 
-    // Set transmitter frequency for FDOA (required even if not using FDOA for model creation)
-    if( config.useFDOA )
+    // Set transmitter frequency for FDOA/OWDMF (required for frequency-based observables)
+    if( config.useFDOA || config.useOWDMF )
     {
         bodies.getBody( config.targetName )
                 ->getVehicleSystems( )
@@ -711,6 +725,51 @@ createObservationSettings( const EstimationConfig& config,
             auto rangeSimSettings = std::make_shared< TabulatedObservationSimulationSettings< double > >(
                     one_way_range, rangeLinkEnds, observationTimes, receiver );
             simSettings.push_back( rangeSimSettings );
+        }
+    }
+
+    // Create one-way Doppler measured frequency observation settings
+    // This creates one-way links from spacecraft to each ground station
+    if( config.useOWDMF )
+    {
+        // Get unique ground stations from any available link definitions
+        std::set< std::string > groundStations;
+        for( const auto& [ obsType, linkDefs ] : linkDefsPerObservable )
+        {
+            for( const auto& linkDef : linkDefs )
+            {
+                LinkEnds linkEnds = linkDef.linkEnds_;
+                if( linkEnds.count( receiver ) )
+                {
+                    groundStations.insert( linkEnds.at( receiver ).stationName_ );
+                }
+                if( linkEnds.count( receiver2 ) )
+                {
+                    groundStations.insert( linkEnds.at( receiver2 ).stationName_ );
+                }
+            }
+        }
+
+        std::cout << "  Creating OWDMF links from " << groundStations.size( ) << " ground stations" << std::endl;
+
+        for( const auto& stationName : groundStations )
+        {
+            // Create one-way link: spacecraft transmits, ground station receives (downlink)
+            LinkEnds owdmfLinkEnds;
+            owdmfLinkEnds[ transmitter ] = LinkEndId( config.targetName, "" );
+            owdmfLinkEnds[ receiver ] = LinkEndId( "Earth", stationName );
+
+            std::cout << "  Adding OWDMF link: " << config.targetName << " -> " << stationName << std::endl;
+
+            // Use the one-way Doppler measured frequency observation model
+            auto owdmfModelSettings = oneWayDopplerMeasuredFrequencySettings(
+                    owdmfLinkEnds,
+                    std::vector< std::shared_ptr< LightTimeCorrectionSettings > >( ) );
+            modelSettings.push_back( owdmfModelSettings );
+
+            auto owdmfSimSettings = std::make_shared< TabulatedObservationSimulationSettings< double > >(
+                    one_way_doppler_measured_frequency, owdmfLinkEnds, observationTimes, receiver );
+            simSettings.push_back( owdmfSimSettings );
         }
     }
 

@@ -214,9 +214,7 @@ int main( )
             }
             if (obsType == differenced_frequency_of_arrival )
             {
-                // FDOA observation model
-                auto fdoaModelSettings = std::make_shared< DifferencedFrequencyOfArrivalObservationSettings >(
-                        linkEnds, std::vector< std::shared_ptr< LightTimeCorrectionSettings > >( ) );
+                auto fdoaModelSettings = differencedFrequencyOfArrivalObservationSettings( linkEnds );
                 observationModelSettings.push_back( fdoaModelSettings );
 
                 // FDOA simulation settings

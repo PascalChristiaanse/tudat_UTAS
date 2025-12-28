@@ -1584,6 +1584,7 @@ m.def( "one_way_frequency_of_arrival",
            py::arg( "light_time_correction_settings" ) = std::vector< std::shared_ptr< tom::LightTimeCorrectionSettings > >( ),
            py::arg( "bias_settings" ) = nullptr,
            py::arg( "light_time_convergence_settings" ) = std::make_shared< tom::LightTimeConvergenceCriteria >( ),
+              R"doc(No documentation available.)doc" );
     m.def( "one_way_doppler_measured_frequency",
            py::overload_cast< const tom::LinkDefinition&,
                               const std::vector< std::shared_ptr< tom::LightTimeCorrectionSettings > >&,

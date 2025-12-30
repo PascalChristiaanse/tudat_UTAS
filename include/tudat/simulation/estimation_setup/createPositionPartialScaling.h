@@ -228,7 +228,7 @@ public:
                         std::bind( &linear_algebra::evaluateSecondBlockInStateVector,
                                    receiverNumericalStateDerivativeFunction,
                                    std::placeholders::_1 ),
-                        physical_constants::SPEED_OF_LIGHT,  // One-way Doppler is normalized by c
+                        1,  // One-way Doppler is normalized by c
                         transmitterProperTimePartials,
                         receiverProperTimePartials,
                         observation_models::one_way_doppler );

@@ -99,6 +99,7 @@ bool isObservableTypeMultiLink( const ObservableType observableType )
         case one_way_differenced_range:
         case one_way_frequency_of_arrival:
         case differenced_time_of_arrival:
+        case one_way_doppler_measured_frequency:
         case differenced_frequency_of_arrival:
             break;
         case n_way_range:

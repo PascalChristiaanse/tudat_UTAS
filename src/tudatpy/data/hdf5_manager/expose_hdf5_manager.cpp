@@ -15,6 +15,8 @@
 #include <pybind11/stl.h>
 #include <pybind11/pybind11.h>
 
+#include "scalarTypes.h"
+
 #include <tudat/io/hdf5Manager.h>
 #include <tudat/io/xdmfGenerator.h>
 #include <tudat/basics/timeType.h>
@@ -182,7 +184,7 @@ overwrite : bool, default=True
 
 )doc" )
             .def( "add_single_arc_results",
-                  &tio::HDF5OutputFile::addSingleArcResults< double, double >,
+                  &tio::HDF5OutputFile::addSingleArcResults< double, TIME_TYPE >,
                   py::arg( "results" ),
                   py::arg( "body_name" ),
                   py::arg( "group_path" ) = "/Trajectories/SingleArcSimulationResults",
@@ -201,7 +203,7 @@ group_path : str, default="/Trajectories/SingleArcSimulationResults"
 
 )doc" )
             .def( "add_variational_results",
-                  &tio::HDF5OutputFile::addVariationalResults< double, double >,
+                  &tio::HDF5OutputFile::addVariationalResults< double, TIME_TYPE >,
                   py::arg( "results" ),
                   py::arg( "body_name" ),
                   py::arg( "group_path" ) = "/Trajectories/VariationalEquationsSimulationResults",

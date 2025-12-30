@@ -519,18 +519,18 @@ std::shared_ptr< tom::ObservationCollection< double, Time > > UTASTudatFormatter
     // ======================================================
     // Create empty bodies for targets
     // ======================================================
-    for( const auto& target : targetSet )
-    {
-        try
-        {
-            bodies.getBody( target );
-            std::cout << "Target body " << target << " already exists" << std::endl;
-        }
-        catch( const std::runtime_error& )
-        {
-            bodies.addBody( std::make_shared< simulation_setup::Body >( ), target );
-        }
-    }
+    // for( const auto& target : targetSet )
+    // {
+    //     try
+    //     {
+    //         bodies.getBody( target );
+    //         std::cout << "Target body " << target << " already exists" << std::endl;
+    //     }
+    //     catch( const std::runtime_error& )
+    //     {
+    //         bodies.addBody( std::make_shared< simulation_setup::Body >( ), target );
+    //     }
+    // }
 
     // ======================================================
     // Build observation sets

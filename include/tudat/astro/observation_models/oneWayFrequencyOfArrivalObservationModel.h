@@ -168,7 +168,7 @@ public:
 
         // Scale by transmitter frequency to get absolute frequency in Hz
         // FOA [Hz] = f_tx [Hz] × doppler_ratio
-        ObservationScalarType foa_hz = doppler_ratio * transmitterFrequency;
+        ObservationScalarType foa_hz = (2 - doppler_ratio) * transmitterFrequency;
 
         // ==================== END FOA COMPUTATION ====================
         // Return absolute frequency in Hz

@@ -8,29 +8,29 @@
 #    http://tudat.tudelft.nl/LICENSE.
 
 # Build horizons_example application (demonstrates pure C++ Horizons interface)
-find_package(CURL REQUIRED)
-TUDAT_ADD_EXECUTABLE(horizons_example
-        "horizons_example.cpp"
-        ${Tudat_ESTIMATION_LIBRARIES}
-        )
-target_link_libraries(horizons_example 
-        PUBLIC ${Tudat_ESTIMATION_LIBRARIES}
-        PRIVATE tudat_horizons_interface CURL::libcurl
-        )
+# find_package(CURL REQUIRED)
+# TUDAT_ADD_EXECUTABLE(horizons_example
+#         "horizons_example.cpp"
+#         ${Tudat_ESTIMATION_LIBRARIES}
+#         )
+# target_link_libraries(horizons_example 
+#         PUBLIC ${Tudat_ESTIMATION_LIBRARIES}
+#         PRIVATE tudat_horizons_interface CURL::libcurl
+#         )
 
 # Build hdf5SingleProcess example application
-find_package(HighFive CONFIG REQUIRED)
-find_package(HDF5 REQUIRED COMPONENTS CXX)
+# find_package(HighFive CONFIG REQUIRED)
+# find_package(HDF5 REQUIRED COMPONENTS CXX)
 
-# Build hdf5_orbit_example - demonstrates HDF5 output for orbit propagation
-TUDAT_ADD_EXECUTABLE(hdf5_orbit_example
-        "hdf5_orbit_example.cpp"
-        ${Tudat_ESTIMATION_LIBRARIES}
-        )
-target_link_libraries(hdf5_orbit_example 
-        PUBLIC ${Tudat_ESTIMATION_LIBRARIES}
-        PRIVATE HighFive HDF5::HDF5
-        )
+# # Build hdf5_orbit_example - demonstrates HDF5 output for orbit propagation
+# TUDAT_ADD_EXECUTABLE(hdf5_orbit_example
+#         "hdf5_orbit_example.cpp"
+#         ${Tudat_ESTIMATION_LIBRARIES}
+#         )
+# target_link_libraries(hdf5_orbit_example 
+#         PUBLIC ${Tudat_ESTIMATION_LIBRARIES}
+#         PRIVATE HighFive HDF5::HDF5
+#         )
 
 # Build hdf5_observation_example - demonstrates HDF5 output for observation data
 # TUDAT_ADD_EXECUTABLE(hdf5_observation_example
@@ -43,24 +43,24 @@ target_link_libraries(hdf5_orbit_example
 # )
 
 # Build simulateSpacecraft - spacecraft simulation with Horizons ephemeris
-TUDAT_ADD_EXECUTABLE(simulateSpacecraft
-        "simulateSpacecraft.cpp"
-        ${Tudat_ESTIMATION_LIBRARIES}
-        )
-target_link_libraries(simulateSpacecraft 
-        PUBLIC ${Tudat_ESTIMATION_LIBRARIES}
-        PRIVATE HighFive HDF5::HDF5 tudat_horizons_interface CURL::libcurl
-        )
+# TUDAT_ADD_EXECUTABLE(simulateSpacecraft
+#         "simulateSpacecraft.cpp"
+#         ${Tudat_ESTIMATION_LIBRARIES}
+#         )
+# target_link_libraries(simulateSpacecraft 
+#         PUBLIC ${Tudat_ESTIMATION_LIBRARIES}
+#         PRIVATE HighFive HDF5::HDF5 tudat_horizons_interface CURL::libcurl
+#         )
 
-# Build estimateGeneralized - generalized state estimation with CLI args and JSON config
-TUDAT_ADD_EXECUTABLE(estimateGeneralized
-        "estimateGeneralized.cpp"
-        ${Tudat_ESTIMATION_LIBRARIES}
-        )
-target_link_libraries(estimateGeneralized 
-        PUBLIC ${Tudat_ESTIMATION_LIBRARIES}
-        PRIVATE HighFive HDF5::HDF5 tudat_horizons_interface CURL::libcurl
-        )
+# # Build estimateGeneralized - generalized state estimation with CLI args and JSON config
+# TUDAT_ADD_EXECUTABLE(estimateGeneralized
+#         "estimateGeneralized.cpp"
+#         ${Tudat_ESTIMATION_LIBRARIES}
+#         )
+# target_link_libraries(estimateGeneralized 
+#         PUBLIC ${Tudat_ESTIMATION_LIBRARIES}
+#         PRIVATE HighFive HDF5::HDF5 tudat_horizons_interface CURL::libcurl
+#         )
 
 # Build bepicolombo application with liblro library
 # add_library(lro STATIC liblro.cpp liblro.h)

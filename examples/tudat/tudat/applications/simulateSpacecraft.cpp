@@ -225,6 +225,77 @@ int main( )
         }
     }
 
+    // =========================================================================
+    // Add FOA and OWDMF observation models for comparison/testing
+    // These use a simple one-way link (transmitter -> receiver) instead of VLBI differenced
+    // =========================================================================
+
+    // Create a simple one-way link from spacecraft to first receiver station
+    // Get the first available link definition to extract station names
+    LinkEnds oneWayLinkEnds;
+    std::string receiverStationName;
+    for( const auto& [ obsType, linkDefs ] : linkDefsPerObservable )
+    {
+        if( !linkDefs.empty( ) )
+        {
+            // Extract receiver1 from the differenced link ends (which has transmitter, receiver1, receiver2)
+            auto firstLinkEnds = linkDefs.front( ).linkEnds_;
+            if( firstLinkEnds.count( receiver ) > 0 )
+            {
+                receiverStationName = firstLinkEnds.at( receiver ).stationName_;
+            }
+            else if( firstLinkEnds.count( receiver2 ) > 0 )
+            {
+                receiverStationName = firstLinkEnds.at( receiver2 ).stationName_;
+            }
+            break;
+        }
+    }
+
+    if( !receiverStationName.empty( ) )
+    {
+        // Create one-way link: spacecraft (transmitter) -> ground station (receiver)
+        oneWayLinkEnds[ transmitter ] = LinkEndId( capstoneName, "" );
+        oneWayLinkEnds[ receiver ] = LinkEndId( "Earth", receiverStationName );
+
+        std::cout << "\nCreating one-way observation models for comparison:" << std::endl;
+        std::cout << "  Transmitter: " << capstoneName << std::endl;
+        std::cout << "  Receiver: Earth/" << receiverStationName << std::endl;
+
+        // FOA (One-Way Frequency of Arrival) observation model
+        auto foaModelSettings = std::make_shared< FrequencyOfArrivalObservationSettings >(
+                oneWayLinkEnds,
+                std::vector< std::shared_ptr< LightTimeCorrectionSettings > >( ),
+                basic_astrodynamics::tdb_scale );
+        observationModelSettings.push_back( foaModelSettings );
+
+        auto foaSimSettings = std::make_shared< TabulatedObservationSimulationSettings< double > >(
+                one_way_frequency_of_arrival, oneWayLinkEnds, observationTimes, receiver );
+        observationSimulationSettings.push_back( foaSimSettings );
+
+        // OWDMF (One-Way Doppler Measured Frequency) observation model
+        // First create the underlying one-way Doppler settings
+        auto oneWayDopplerSettings = std::make_shared< OneWayDopplerObservationModelSettings >(
+                oneWayLinkEnds,
+                std::vector< std::shared_ptr< LightTimeCorrectionSettings > >( ),
+                nullptr,  // transmitterProperTimeRateSettings
+                nullptr,  // receiverProperTimeRateSettings
+                nullptr,  // biasSettings
+                std::make_shared< LightTimeConvergenceCriteria >( ) );
+        oneWayDopplerSettings->normalizeWithSpeedOfLight_ = false;  // Get actual Doppler shift
+
+        auto owdmfModelSettings = std::make_shared< OneWayDopplerMeasuredFrequencyObservationSettings >(
+                oneWayLinkEnds,
+                oneWayDopplerSettings,
+                std::vector< std::shared_ptr< LightTimeCorrectionSettings > >( ),
+                basic_astrodynamics::tdb_scale );
+        observationModelSettings.push_back( owdmfModelSettings );
+
+        auto owdmfSimSettings = std::make_shared< TabulatedObservationSimulationSettings< double > >(
+                one_way_doppler_measured_frequency, oneWayLinkEnds, observationTimes, receiver );
+        observationSimulationSettings.push_back( owdmfSimSettings );
+    }
+
     std::cout << "Created " << observationModelSettings.size( ) << " observation model settings." << std::endl;
 
     // =========================================================================
@@ -249,11 +320,6 @@ int main( )
     {
         for( const auto& linkDef : linkDefs )
         {
-            if( obsType == differenced_frequency_of_arrival )
-            {
-                // std::cout << "\nNote: FDOA observations are not yet implemented in this example." << std::endl;
-                continue;
-            }
             auto obsSets = observationCollection->getSingleLinkAndTypeObservationSets( obsType, linkDef );
 
             if( !obsSets.empty( ) )
@@ -274,9 +340,98 @@ int main( )
                     {
                         auto timeJD = julianDayFromTime< double >( obs.first );
                         std::cout << "  Time: " << std::fixed << std::setprecision( 9 ) << timeJD << " TDB" << obs.first << " s,"
-                                  << " s, FDOA: " << std::setprecision( 12 ) << obs.second( 0 ) * 1e9 << " ns" << std::endl;
+                                  << " FDOA: " << std::setprecision( 6 ) << obs.second( 0 ) << " Hz" << std::endl;
                     }
                     if( ++count >= 3 ) break;
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // Print sample FOA and OWDMF observations for comparison
+    // =========================================================================
+
+    if( !receiverStationName.empty( ) )
+    {
+        // Print FOA observations
+        LinkDefinition foaLinkDef( oneWayLinkEnds );
+        auto foaObsSets = observationCollection->getSingleLinkAndTypeObservationSets( one_way_frequency_of_arrival, foaLinkDef );
+        if( !foaObsSets.empty( ) )
+        {
+            auto obsHistory = foaObsSets.at( 0 )->getObservationsHistory( );
+            std::cout << "\n=== Sample One-Way Frequency of Arrival (FOA) Observations ===" << std::endl;
+            std::cout << "  (Relativistic Doppler-shifted frequency at receiver)" << std::endl;
+
+            int count = 0;
+            for( const auto& obs : obsHistory )
+            {
+                auto timeJD = julianDayFromTime< double >( obs.first );
+                double foaHz = obs.second( 0 );
+                double dopplerShift = ( foaHz - transmitterFrequency ) / transmitterFrequency;
+                std::cout << "  Time: " << std::fixed << std::setprecision( 6 ) << timeJD << " TDB, "
+                          << "FOA: " << std::setprecision( 3 ) << foaHz / 1e6 << " MHz, "
+                          << "Doppler: " << std::scientific << std::setprecision( 6 ) << dopplerShift << std::endl;
+                if( ++count >= 5 ) break;
+            }
+        }
+
+        // Print OWDMF observations
+        auto owdmfObsSets = observationCollection->getSingleLinkAndTypeObservationSets( one_way_doppler_measured_frequency, foaLinkDef );
+        if( !owdmfObsSets.empty( ) )
+        {
+            auto obsHistory = owdmfObsSets.at( 0 )->getObservationsHistory( );
+            std::cout << "\n=== Sample One-Way Doppler Measured Frequency (OWDMF) Observations ===" << std::endl;
+            std::cout << "  (Measured frequency using Doppler observation model)" << std::endl;
+
+            int count = 0;
+            for( const auto& obs : obsHistory )
+            {
+                auto timeJD = julianDayFromTime< double >( obs.first );
+                double owdmfHz = obs.second( 0 );
+                double dopplerShift = ( owdmfHz - transmitterFrequency ) / transmitterFrequency;
+                std::cout << "  Time: " << std::fixed << std::setprecision( 6 ) << timeJD << " TDB, "
+                          << "OWDMF: " << std::setprecision( 3 ) << owdmfHz / 1e6 << " MHz, "
+                          << "Doppler: " << std::scientific << std::setprecision( 6 ) << dopplerShift << std::endl;
+                if( ++count >= 5 ) break;
+            }
+        }
+
+        // Compare FOA and OWDMF
+        if( !foaObsSets.empty( ) && !owdmfObsSets.empty( ) )
+        {
+            auto foaHistory = foaObsSets.at( 0 )->getObservationsHistory( );
+            auto owdmfHistory = owdmfObsSets.at( 0 )->getObservationsHistory( );
+
+            std::cout << "\n=== FOA vs OWDMF Comparison ===" << std::endl;
+            std::cout << "  (Difference should be small if models are consistent)" << std::endl;
+
+            auto foaIt = foaHistory.begin( );
+            auto owdmfIt = owdmfHistory.begin( );
+            int count = 0;
+            while( foaIt != foaHistory.end( ) && owdmfIt != owdmfHistory.end( ) && count < 5 )
+            {
+                if( std::abs( foaIt->first - owdmfIt->first ) < 1e-6 )
+                {
+                    double foaHz = foaIt->second( 0 );
+                    double owdmfHz = owdmfIt->second( 0 );
+                    double diffHz = foaHz - owdmfHz;
+                    double diffPpm = diffHz / transmitterFrequency * 1e6;
+                    auto timeJD = julianDayFromTime< double >( foaIt->first );
+                    std::cout << "  Time: " << std::fixed << std::setprecision( 6 ) << timeJD << " TDB, "
+                              << "Diff: " << std::setprecision( 6 ) << diffHz << " Hz ("
+                              << std::setprecision( 9 ) << diffPpm << " ppm)" << std::endl;
+                    ++foaIt;
+                    ++owdmfIt;
+                    ++count;
+                }
+                else if( foaIt->first < owdmfIt->first )
+                {
+                    ++foaIt;
+                }
+                else
+                {
+                    ++owdmfIt;
                 }
             }
         }

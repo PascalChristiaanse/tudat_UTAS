@@ -1,0 +1,209 @@
+# clang-uml configuration for Unified Data Library Reader
+# Generate diagrams with: clang-uml
+# 
+# Prerequisites:
+#   1. Install clang-uml (https://github.com/bkryza/clang-uml)
+#   2. Generate compile_commands.json by adding to CMakeLists.txt:
+#        set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+#      Then rebuild the project.
+
+compilation_database_dir: build
+output_directory: docs/uml
+
+diagrams:
+  # ============================================================================
+  # Main UDL Class Hierarchy Diagram
+  # ============================================================================
+  unified_data_library_classes:
+    type: class
+    title: "Unified Data Library Reader - Class Structure"
+    glob:
+      - include/tudat/io/unifiedDataLibraryReader.h
+      - src/tudat/io/unifiedDataLibraryReader.cpp
+    include:
+      namespaces:
+        - tudat::io
+      relationships:
+        - inheritance
+        - composition
+        - aggregation
+        - association
+    exclude:
+      namespaces:
+        - std
+        - nlohmann
+        - Eigen
+    generate_packages: true
+    package_type: namespace
+    generate_method_arguments: none
+    plantuml:
+      before:
+        - 'skinparam linetype ortho'
+        - 'skinparam classAttributeIconSize 0'
+        - 'skinparam classFontSize 12'
+        - 'skinparam packageStyle rectangle'
+        - 'hide empty members'
+        - ''
+        - 'skinparam class {'
+        - '  BackgroundColor White'
+        - '  BorderColor Black'
+        - '  ArrowColor DarkSlateGray'
+        - '}'
+      after:
+        - ''
+        - 'note "UDL = Unified Data Library\nUTAS = UTAS supplier format" as N1'
+
+  # ============================================================================
+  # Detailed Class Diagram with All Members
+  # ============================================================================
+  unified_data_library_detailed:
+    type: class
+    title: "UDL Reader - Detailed Class Diagram"
+    glob:
+      - src/tudat/io/unifiedDataLibraryReader.cpp
+    include:
+      namespaces:
+        - tudat::io
+      relationships:
+        - inheritance
+        - composition
+        - aggregation
+        - association
+        - dependency
+    exclude:
+      namespaces:
+        - std
+        - nlohmann
+        - Eigen
+        - tudat::basic_astrodynamics
+        - tudat::earth_orientation
+        - tudat::observation_models
+        - tudat::simulation_setup
+    generate_packages: true
+    package_type: namespace
+    generate_method_arguments: none
+    plantuml:
+      before:
+        - 'skinparam linetype ortho'
+        - 'skinparam classAttributeIconSize 10'
+        - 'skinparam classFontSize 11'
+        - 'skinparam packageStyle rectangle'
+        - ''
+        - 'skinparam class {'
+        - '  BackgroundColor LightYellow'
+        - '  BorderColor DarkGoldenRod'
+        - '  ArrowColor DarkSlateGray'
+        - '}'
+
+  # ============================================================================
+  # Inheritance Hierarchy Only
+  # ============================================================================
+  udl_inheritance:
+    type: class
+    title: "UDL Observation Set Inheritance"
+    glob:
+      - src/tudat/io/unifiedDataLibraryReader.cpp
+    include:
+      elements:
+        - tudat::io::UDLObservationSet
+        - tudat::io::UTASObservationSet
+      relationships:
+        - inheritance
+    exclude:
+      namespaces:
+        - std
+        - nlohmann
+        - Eigen
+    generate_method_arguments: none
+    plantuml:
+      before:
+        - 'skinparam linetype ortho'
+        - 'hide empty fields'
+        - 'hide empty methods'
+        - ''
+        - 'skinparam class {'
+        - '  BackgroundColor<<base>> LightBlue'
+        - '  BackgroundColor<<derived>> LightGreen'
+        - '}'
+
+  # ============================================================================
+  # Data Flow / Composition Diagram
+  # ============================================================================
+  udl_composition:
+    type: class
+    title: "UDL Data Composition Structure"
+    glob:
+      - src/tudat/io/unifiedDataLibraryReader.cpp
+    include:
+      elements:
+        - tudat::io::GeodeticPosition
+        - tudat::io::UDLStationInfo
+        - tudat::io::UDLObservationMetadata
+        - tudat::io::UDLTimeSeries
+        - tudat::io::UDLObservationSet
+        - tudat::io::UTASObservationSet
+        - tudat::io::UTASObservationCollection
+        - tudat::io::UTASTudatFormatter
+        - tudat::io::BatchVLBI
+      relationships:
+        - composition
+        - aggregation
+    exclude:
+      namespaces:
+        - std
+        - nlohmann
+        - Eigen
+    generate_method_arguments: none
+    plantuml:
+      before:
+        - 'skinparam linetype ortho'
+        - 'skinparam classAttributeIconSize 0'
+        - 'hide methods'
+        - ''
+        - 'left to right direction'
+        - ''
+        - 'skinparam class {'
+        - '  BackgroundColor<<struct>> LightCyan'
+        - '  BackgroundColor<<class>> White'
+        - '}'
+      after:
+        - ''
+        - 'note right of tudat::io::BatchVLBI : High-level convenience class'
+        - 'note right of tudat::io::UTASTudatFormatter : Converts to Tudat format'
+
+  # ============================================================================
+  # Sequence Diagram: UTASTudatFormatter::toTudat
+  # ============================================================================
+  formatter_toTudat_sequence:
+    type: sequence
+    title: "UTASTudatFormatter::toTudat() Interaction"
+    glob:
+      - src/tudat/io/unifiedDataLibraryReader.cpp
+    include:
+      paths:
+        - src/tudat/io
+        - include/tudat/io
+    exclude:
+      namespaces:
+        - std
+        - nlohmann
+        - Eigen
+    start_from:
+      - function:
+          r: "tudat::io::UTASTudatFormatter::toTudat.*"
+    plantuml:
+      before:
+        - 'skinparam sequenceArrowThickness 1'
+        - 'skinparam sequenceParticipant underline'
+        - 'skinparam sequenceMessageAlign center'
+        - 'skinparam responseMessageBelowArrow true'
+        - ''
+        - 'skinparam participant {'
+        - '  BackgroundColor White'
+        - '  BorderColor Black'
+        - '}'
+        - ''
+        - 'skinparam sequence {'
+        - '  ArrowColor DarkSlateGray'
+        - '  LifeLineBorderColor Gray'
+        - '}'

@@ -1099,8 +1099,8 @@ public:
                                   lightTimeCorrections,
                                   biasSettings,
                                   lightTimeConvergenceCriteria ),
-        differencedTimeScale_( differencedTimeScale ), firstDopplerModelSettings_( firstDopplerModelSettings ),
-        secondDopplerModelSettings_( secondDopplerModelSettings )
+        firstDopplerModelSettings_( firstDopplerModelSettings ), secondDopplerModelSettings_( secondDopplerModelSettings ),
+        differencedTimeScale_( differencedTimeScale )
     {}
 
     [[nodiscard]] std::shared_ptr< OneWayDopplerMeasuredFrequencyObservationSettings > getFirstDopplerModelSettings( ) const
@@ -1503,10 +1503,20 @@ inline std::shared_ptr< ObservationModelSettings > differencedFrequencyOfArrival
             secondDopplerLinkEnds, lightTimeCorrections, nullptr, nullptr, nullptr, lightTimeConvergenceCriteria, true );
 
     // Create OneWayDopplerMeasuredFrequencyObservationSettings for each link
-    auto firstOneWayDopplerModelSettings = std::make_shared< OneWayDopplerMeasuredFrequencyObservationSettings >(
-            firstDopplerLinkEnds, firstOneWayDopplerSettings, lightTimeCorrections, differencedTimeScale, nullptr, lightTimeConvergenceCriteria );
-    auto secondOneWayDopplerModelSettings = std::make_shared< OneWayDopplerMeasuredFrequencyObservationSettings >(
-            secondDopplerLinkEnds, secondOneWayDopplerSettings, lightTimeCorrections, differencedTimeScale, nullptr, lightTimeConvergenceCriteria );
+    auto firstOneWayDopplerModelSettings =
+            std::make_shared< OneWayDopplerMeasuredFrequencyObservationSettings >( firstDopplerLinkEnds,
+                                                                                   firstOneWayDopplerSettings,
+                                                                                   lightTimeCorrections,
+                                                                                   differencedTimeScale,
+                                                                                   nullptr,
+                                                                                   lightTimeConvergenceCriteria );
+    auto secondOneWayDopplerModelSettings =
+            std::make_shared< OneWayDopplerMeasuredFrequencyObservationSettings >( secondDopplerLinkEnds,
+                                                                                   secondOneWayDopplerSettings,
+                                                                                   lightTimeCorrections,
+                                                                                   differencedTimeScale,
+                                                                                   nullptr,
+                                                                                   lightTimeConvergenceCriteria );
 
     return std::make_shared< DifferencedFrequencyOfArrivalObservationSettings >( linkEnds,
                                                                                  firstOneWayDopplerModelSettings,
@@ -3055,11 +3065,14 @@ public:
                 {
                     throw std::runtime_error( "Error when making differenced frequency of arrival, no second receiver found" );
                 }
-                
-                if (differencedFrequencyObservationSettings->getFirstDopplerModelSettings() == nullptr || differencedFrequencyObservationSettings->getSecondDopplerModelSettings() == nullptr ) {
-                    throw std::runtime_error( "Error when making differenced frequency of arrival, one of the doppler model settings is null" );
+
+                if( differencedFrequencyObservationSettings->getFirstDopplerModelSettings( ) == nullptr ||
+                    differencedFrequencyObservationSettings->getSecondDopplerModelSettings( ) == nullptr )
+                {
+                    throw std::runtime_error(
+                            "Error when making differenced frequency of arrival, one of the doppler model settings is null" );
                 }
-                
+
                 std::shared_ptr< ObservationBias< 1 > > observationBias;
                 if( observationSettings->biasSettings_ != nullptr )
                 {

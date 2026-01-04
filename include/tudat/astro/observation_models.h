@@ -35,4 +35,8 @@
 #include "observation_models/corrections/atmosphereCorrection.h"
 #include "observation_models/corrections/solarCoronaCorrection.h"
 
+#include "observation_models/differencedTimeOfArrivalObservationModel.h"
+#include "observation_models/differencedFrequencyOfArrivalObservationModel.h"
+#include "observation_models/oneWayDopplerMeasuredFrequencyObservationModel.h"
+
 #endif  // TUDAT_OBSERVATION_MODELS_H

@@ -1,5 +1,5 @@
 /*    Copyright (c) 2010-2019, Delft University of Technology
- *    All rigths reserved
+ *    All rights reserved
  *
  *    This file is part of the Tudat. Redistribution and use in source and
  *    binary forms, with or without modification, are permitted exclusively
@@ -8,38 +8,30 @@
  *    http://tudat.tudelft.nl/LICENSE.
  */
 
-#ifndef TUDAT_UNIFIED_DATA_LIBRARY_READER_H
-#define TUDAT_UNIFIED_DATA_LIBRARY_READER_H
+#ifndef TUDAT_UNIFIED_DATA_LIBRARY_READER_NEW_H
+#define TUDAT_UNIFIED_DATA_LIBRARY_READER_NEW_H
 
 #include <iostream>
 #include <fstream>
 #include <string>
 #include <vector>
 #include <memory>
-#include <Eigen/Dense>
 #include <map>
 #include <set>
 #include <stdexcept>
-#include <cmath>
+#include <sstream>
 
+#include <Eigen/Dense>
 #include <nlohmann/json.hpp>
 
 #include "tudat/basics/timeType.h"
 #include "tudat/astro/observation_models/linkTypeDefs.h"
-#include "tudat/astro/observation_models/observationModel.h"
 #include "tudat/astro/observation_models/observableTypes.h"
-#include "tudat/astro/basic_astro/dateTime.h"
-#include "tudat/astro/earth_orientation/terrestrialTimeScaleConverter.h"
-#include "tudat/astro/basic_astro/timeConversions.h"
 #include "tudat/simulation/simulation.h"
 #include "tudat/simulation/estimation_setup/singleObservationSet.h"
 #include "tudat/simulation/estimation_setup/observationCollection.h"
 #include "tudat/simulation/environment_setup/createGroundStations.h"
 #include "tudat/math/basic/mathematicalConstants.h"
-
-namespace tba = tudat::basic_astrodynamics;
-namespace teo = tudat::earth_orientation;
-namespace tom = tudat::observation_models;
 
 namespace tudat
 {
@@ -47,342 +39,498 @@ namespace io
 {
 
 // ============================================================================
-// GENERIC UDL BASE STRUCTURES
+// GEODETIC POSITION HELPER
 // ============================================================================
 
 /**
- * @brief Geodetic position structure (generic, unit-agnostic)
+ * @brief Geodetic position structure (altitude, latitude, longitude)
+ *
+ * Units depend on context - use convertToTudatGeodetic for Tudat-compatible output.
  */
-struct GeodeticPosition {
-    double longitude;  // Angular unit depends on supplier format
-    double latitude;   // Angular unit depends on supplier format
-    double altitude;   // Length unit depends on supplier format
+struct GeodeticPositionNew
+{
+    double altitude;   // Length unit depends on source
+    double latitude;   // Angular unit depends on source
+    double longitude;  // Angular unit depends on source
 
-    GeodeticPosition( ): longitude( 0.0 ), latitude( 0.0 ), altitude( 0.0 ) {}
-    GeodeticPosition( double alt, double lat, double lon ): longitude( lon ), latitude( lat ), altitude( alt ) {}
+    GeodeticPositionNew( ): altitude( 0.0 ), latitude( 0.0 ), longitude( 0.0 ) {}
+    GeodeticPositionNew( double alt, double lat, double lon ): altitude( alt ), latitude( lat ), longitude( lon ) {}
 
     bool isZero( ) const
     {
-        return longitude == 0.0 && latitude == 0.0 && altitude == 0.0;
+        return altitude == 0.0 && latitude == 0.0 && longitude == 0.0;
     }
 
     Eigen::Vector3d toEigenVector( ) const
     {
         return Eigen::Vector3d( altitude, latitude, longitude );
     }
+
+    /**
+     * @brief Convert to Tudat geodetic format (altitude[m], latitude[rad], longitude[rad])
+     *
+     * Assumes input is in meters and degrees, converts to Tudat format.
+     */
+    Eigen::Vector3d toTudatGeodetic( ) const
+    {
+        return Eigen::Vector3d(
+            altitude,
+            latitude * tudat::mathematical_constants::PI / 180.0,
+            longitude * tudat::mathematical_constants::PI / 180.0 );
+    }
 };
 
-/**
- * @brief Station metadata for a single ground station
- */
-struct UDLStationInfo {
-    std::string stationId;
-    GeodeticPosition position;
-};
+// ============================================================================
+// UTAS METADATA STRUCT
+// ============================================================================
 
 /**
- * @brief Base metadata structure for UDL observation sets
+ * @brief Strongly-typed metadata for UTAS observations
  *
- * Contains fields common to all UDL-compliant formats.
- * Supplier-specific parsers should extend this.
+ * Contains target information and signal parameters common across all observations.
+ * Station-specific data is stored separately as there may be multiple station pairs.
  */
-struct UDLObservationMetadata {
-    // Station identifiers
-    std::string station1Id;
-    std::string station2Id;
-
-    // Station positions (in supplier-specific units)
-    GeodeticPosition station1Position;
-    GeodeticPosition station2Position;
-
-    // Target identifier
+struct UTASMetadata
+{
+    // Target identification
     std::string targetId;
 
-    // Observation frequency (Hz)
-    double frequency = 0.0;
+    // Signal parameters (from first file - may vary slightly between files)
+    double frequency = 0.0;    // Hz
+    double bandwidth = 0.0;    // Hz
 
-    // Data provenance
+    // Sensor delays (from first file)
+    double sensor1Delay = 0.0;  // seconds
+    double sensor2Delay = 0.0;  // seconds
+
+    // Data classification
     std::string dataMode;
     std::string origin;
     std::string source;
+    int ucts = 0;
+
+    UTASMetadata( ) = default;
 };
 
+// ============================================================================
+// TYPE ALIASES
+// ============================================================================
+
 /**
- * @brief Time series data for UDL observations
+ * @brief Station pair type (pair of station IDs)
+ */
+using StationPair = std::pair< std::string, std::string >;
+
+/**
+ * @brief Time series data for a single station pair
+ */
+template< typename ObservationScalarType = double, typename TimeType = double >
+struct StationPairObservations
+{
+    std::vector< TimeType > epochs;
+    std::vector< ObservationScalarType > tdoa;
+    std::vector< ObservationScalarType > tdoaUnc;
+    std::vector< ObservationScalarType > fdoa;
+    std::vector< ObservationScalarType > fdoaUnc;
+
+    size_t size( ) const { return epochs.size( ); }
+};
+
+// ============================================================================
+// PARSER BASE CLASS
+// ============================================================================
+
+/**
+ * @brief Base class for UDL format parsers
  *
- * All vectors must have the same length (one entry per observation).
+ * Provides interface for parsing observation data from various formats.
+ * Derived classes implement format-specific parsing logic.
  */
-struct UDLTimeSeries {
-    std::vector< double > epochs;   // Time in seconds since J2000 TDB
-    std::vector< double > tdoa;     // Time Difference of Arrival (seconds)
-    std::vector< double > tdoaUnc;  // TDOA uncertainty (seconds)
-    std::vector< double > fdoa;     // Frequency Difference of Arrival (Hz)
-    std::vector< double > fdoaUnc;  // FDOA uncertainty (Hz)
-
-    size_t size( ) const
-    {
-        return epochs.size( );
-    }
-
-    bool isConsistent( ) const
-    {
-        size_t n = epochs.size( );
-        return tdoa.size( ) == n && tdoaUnc.size( ) == n && fdoa.size( ) == n && fdoaUnc.size( ) == n;
-    }
-};
-
-/**
- * @brief Base class for UDL observation sets
- */
-class UDLObservationSet
+template< typename ObservationScalarType = double, typename TimeType = double >
+class ParserBase
 {
 public:
-    virtual ~UDLObservationSet( ) = default;
+    virtual ~ParserBase( ) = default;
 
-    const UDLObservationMetadata& getMetadata( ) const
-    {
-        return metadata_;
-    }
-    const UDLTimeSeries& getTimeSeries( ) const
-    {
-        return timeSeries_;
-    }
+    /**
+     * @brief Parse all files and populate internal data structures
+     */
+    virtual void parseFiles( ) = 0;
 
-    size_t numObservations( ) const
+    /**
+     * @brief Get observation epochs in TDB seconds since J2000
+     */
+    virtual const std::vector< TimeType >& getEpochs( ) const = 0;
+
+
+    /**
+     * @brief Get number of observations
+     */
+    virtual size_t getNumObservations( ) const = 0;
+
+    /**
+     * @brief Convert geodetic position to Tudat format (radians, meters)
+     *
+     * @param pos Position in source units
+     * @param angleInDegrees True if source angles are in degrees
+     * @param altitudeInKm True if source altitude is in kilometers
+     * @return Eigen::Vector3d (altitude[m], latitude[rad], longitude[rad])
+     */
+    static Eigen::Vector3d convertToTudatGeodetic( const GeodeticPositionNew& pos,
+                                                   bool angleInDegrees = true,
+                                                   bool altitudeInKm = true )
     {
-        return timeSeries_.size( );
+        double longitude = pos.longitude;
+        double latitude = pos.latitude;
+        double altitude = pos.altitude;
+
+        if( angleInDegrees )
+        {
+            longitude *= mathematical_constants::PI / 180.0;
+            latitude *= mathematical_constants::PI / 180.0;
+        }
+
+        if( altitudeInKm )
+        {
+            altitude *= 1000.0;
+        }
+
+        return Eigen::Vector3d( altitude, latitude, longitude );
     }
 
 protected:
-    UDLObservationMetadata metadata_;
-    UDLTimeSeries timeSeries_;
+    std::vector< std::string > filePaths_;
 };
 
 // ============================================================================
-// UTAS-SPECIFIC PARSER
+// UTAS PARSER
 // ============================================================================
 
 /**
- * @brief UTAS-specific observation set parser
+ * @brief Parser for UTAS (Unified Tracking and Analysis System) format
  *
- * Parses JSON data from UTAS format with strict type checking.
- * Throws std::runtime_error on any parsing failure.
- *
- * Expected JSON format: Array of observation objects, each containing:
- * - Constant fields (same for all observations): origSensorId1, origSensorId2,
- *   senlat, senlon, senalt, sen2lat, sen2lon, sen2alt, satNo, frequency, dataMode, etc.
- * - Time-varying fields: obTime, tdoa, tdoaUnc, fdoa, fdoaUnc
- *
- * Position units: degrees for lat/lon, km for altitude
+ * Parses JSON files in UTAS format, enforcing single-target constraint.
+ * Supports multiple station pairs across files.
+ * Throws std::runtime_error if multiple targets are detected.
  */
-class UTASObservationSet : public UDLObservationSet
+template< typename ObservationScalarType = double, typename TimeType = double >
+class UTASParser : public ParserBase< ObservationScalarType, TimeType >
 {
 public:
     /**
-     * @brief Parse UTAS JSON data
-     * @param j JSON data (must be array of observation objects)
-     * @throws std::runtime_error on parsing failure or validation error
+     * @brief Construct parser from file paths
+     *
+     * @param filePaths List of JSON file paths to parse
+     * @throws std::runtime_error if files contain multiple targets
      */
-    explicit UTASObservationSet( const nlohmann::json& j );
+    explicit UTASParser( const std::vector< std::string >& filePaths );
+
+    void parseFiles( ) override;
+
+    // Legacy single-vector interface (concatenates all station pairs)
+    const std::vector< TimeType >& getEpochs( ) const override { return allEpochs_; }
+    const std::vector< ObservationScalarType >& getTdoaObservations( ) const { return allTdoa_; }
+    const std::vector< ObservationScalarType >& getTdoaUncertainties( ) const { return allTdoaUnc_; }
+    const std::vector< ObservationScalarType >& getFdoaObservations( ) const { return allFdoa_; }
+    const std::vector< ObservationScalarType >& getFdoaUncertainties( ) const { return allFdoaUnc_; }
+    size_t getNumObservations( ) const override { return allEpochs_.size( ); }
 
     /**
-     * @brief Get station delays (constant for all observations)
+     * @brief Get parsed metadata
      */
-    double getSensor1Delay( ) const
-    {
-        return sensor1Delay_;
-    }
-    double getSensor2Delay( ) const
-    {
-        return sensor2Delay_;
-    }
-    double getBandwidth( ) const
-    {
-        return bandwidth_;
-    }
-    int getUcts( ) const
-    {
-        return ucts_;
-    }
+    const UTASMetadata& getMetadata( ) const { return metadata_; }
+
+    /**
+     * @brief Get all unique station pairs
+     */
+    std::vector< StationPair > getStationPairs( ) const;
+
+    /**
+     * @brief Get all unique station names
+     */
+    std::set< std::string > getStationNames( ) const;
+
+    /**
+     * @brief Get station positions map
+     */
+    const std::map< std::string, GeodeticPositionNew >& getStationPositions( ) const { return stationPositions_; }
+
+    /**
+     * @brief Get observations for a specific station pair
+     */
+    const StationPairObservations< ObservationScalarType, TimeType >& 
+    getObservationsForStationPair( const StationPair& stationPair ) const;
+
+    /**
+     * @brief Get all observations organized by station pair
+     */
+    const std::map< StationPair, StationPairObservations< ObservationScalarType, TimeType > >&
+    getAllObservationsByStationPair( ) const { return observationsByStationPair_; }
+
+    /**
+     * @brief Get station position in Tudat format (radians, meters)
+     */
+    Eigen::Vector3d getStationTudatPosition( const std::string& stationName ) const;
 
 private:
-    // Parse methods
-    void parseMetadata( const nlohmann::json& firstObs );
-    void parseTimeSeries( const nlohmann::json& observations );
-    void validateMetadataConsistency( const nlohmann::json& observations );
-    double convertIsoStringToEpoch( const std::string& isoTime );
+    void parseFile( const std::string& filePath );
+    void parseObservationArray( const nlohmann::json& observations, const std::string& filePath );
+    void validateSingleTarget( const std::string& newTargetId, const std::string& filePath );
+    void rebuildConcatenatedVectors( );
+    TimeType convertIsoStringToEpoch( const std::string& isoTime );
 
-    // Helper to get required field with type checking
     template< typename T >
     static T getRequired( const nlohmann::json& obj, const std::string& key );
 
     template< typename T >
     static T getOptional( const nlohmann::json& obj, const std::string& key, const T& defaultValue );
 
-    // UTAS-specific constant fields
-    double sensor1Delay_ = 0.0;
-    double sensor2Delay_ = 0.0;
-    double bandwidth_ = 0.0;
-    int ucts_ = 0;
+    static std::string getStringOrNumber( const nlohmann::json& obj, const std::string& key );
 
-    // Time converter
-    std::shared_ptr< teo::TerrestrialTimeScaleConverter > timeConverter_;
+    UTASMetadata metadata_;
+    bool metadataInitialized_ = false;
+
+    // Observations organized by station pair
+    std::map< StationPair, StationPairObservations< ObservationScalarType, TimeType > > observationsByStationPair_;
+
+    // Station positions (accumulated from all files)
+    std::map< std::string, GeodeticPositionNew > stationPositions_;
+
+    // Concatenated vectors for legacy interface
+    std::vector< TimeType > allEpochs_;
+    std::vector< ObservationScalarType > allTdoa_;
+    std::vector< ObservationScalarType > allTdoaUnc_;
+    std::vector< ObservationScalarType > allFdoa_;
+    std::vector< ObservationScalarType > allFdoaUnc_;
+
+    std::set< std::string > foundTargets_;  // Track all targets found for error messages
 };
 
 // ============================================================================
-// OBSERVATION COLLECTION
+// BATCH UDL BASE CLASS
 // ============================================================================
 
 /**
- * @brief Collection of UTAS observation sets organized by target and station pairs
+ * @brief Base class for batch UDL observation loaders
+ *
+ * Provides common interface for loading observations from UDL-compliant formats.
+ * Derived classes implement format-specific functionality.
  */
-class UTASObservationCollection
+template< typename ObservationScalarType = double, typename TimeType = double >
+class BatchUDL
 {
 public:
-    UTASObservationCollection( ) = default;
+    virtual ~BatchUDL( ) = default;
 
+    /**
+     * @brief Ensure the station body has a compatible shape model
+     *
+     * Creates an oblate spheroid shape model from SPICE if none exists.
+     * Throws if an incompatible shape model is present.
+     *
+     * @param bodies System of bodies
+     * @param stationBodyName Name of body to check/modify
+     * @throws std::runtime_error if body has incompatible shape model
+     */
+    virtual void ensureShapeModel( simulation_setup::SystemOfBodies& bodies,
+                                   const std::string& stationBodyName ) const = 0;
+
+    /**
+     * @brief Create ground stations on the specified body
+     *
+     * @param bodies System of bodies (modified in place)
+     * @param stationBodyName Body on which to create stations
+     * @return Vector of created station names
+     */
+    virtual std::vector< std::string > createGroundStations(
+        simulation_setup::SystemOfBodies& bodies,
+        const std::string& stationBodyName ) const = 0;
+
+    /**
+     * @brief Get link definition for the observation geometry
+     *
+     * @param stationBodyName Name of body hosting ground stations
+     * @param targetNameOverride Custom target name for link definition (empty = use ID from data)
+     * @return Vector of LinkDefinitions (one per station pair)
+     */
+    virtual std::vector< observation_models::LinkDefinition > getLinkDefinitions(
+        const std::string& stationBodyName,
+        const std::string& targetNameOverride = "" ) const = 0;
+
+    /**
+     * @brief Get observation collection in Tudat format
+     *
+     * Creates SingleObservationSets for TDOA and FDOA observations.
+     *
+     * @param stationBodyName Name of body hosting ground stations
+     * @param targetNameOverride Custom target name for link definition (empty = use ID from data)
+     * @return Shared pointer to ObservationCollection
+     */
+    virtual std::shared_ptr< observation_models::ObservationCollection< ObservationScalarType, TimeType > >
+    getObservationCollection( const std::string& stationBodyName,
+                              const std::string& targetNameOverride = "" ) const = 0;
+
+    /**
+     * @brief Full conversion to Tudat format
+     *
+     * Orchestrates all steps: shape model, ground stations, link definition,
+     * and observation collection creation.
+     *
+     * @param bodies System of bodies (modified in place)
+     * @param stationBodyName Body on which to create stations (default: "Earth")
+     * @param targetNameOverride Custom target name for link definition (empty = use ID from data)
+     * @return Shared pointer to ObservationCollection
+     */
+    virtual std::shared_ptr< observation_models::ObservationCollection< ObservationScalarType, TimeType > >
+    toTudat( simulation_setup::SystemOfBodies& bodies,
+             const std::string& stationBodyName = "Earth",
+             const std::string& targetNameOverride = "" ) = 0;
+
+    /**
+     * @brief Get target ID from observations
+     */
+    virtual std::string getTargetId( ) const = 0;
+
+    /**
+     * @brief Get station 1 ID
+     */
+    virtual std::string getStation1Id( ) const = 0;
+
+    /**
+     * @brief Get station 2 ID
+     */
+    virtual std::string getStation2Id( ) const = 0;
+
+    /**
+     * @brief Get number of observations
+     */
+    virtual size_t getNumObservations( ) const = 0;
+};
+
+// ============================================================================
+// BATCH UTAS CLASS
+// ============================================================================
+
+/**
+ * @brief Batch loader for UTAS format observations
+ *
+ * Main user-facing class for loading UTAS TDOA/FDOA observations.
+ * Supports single-target data with multiple station pairs across files.
+ * Throws if multiple targets detected.
+ *
+ * Example usage:
+ * @code
+ * BatchUTAS<double, Time> batch({"file1.json", "file2.json"});
+ * auto collection = batch.toTudat(bodies, "Earth", "MySpacecraft");
+ * @endcode
+ */
+template< typename ObservationScalarType = double, typename TimeType = double >
+class BatchUTAS : public BatchUDL< ObservationScalarType, TimeType >
+{
+public:
     /**
      * @brief Construct from list of JSON file paths
+     *
+     * @param filePaths List of UTAS JSON files
+     * @throws std::runtime_error if files contain multiple targets
      */
-    explicit UTASObservationCollection( const std::vector< std::string >& filePaths );
+    explicit BatchUTAS( const std::vector< std::string >& filePaths );
+
+    // ========================================
+    // BatchUDL interface implementation
+    // ========================================
+
+    void ensureShapeModel( simulation_setup::SystemOfBodies& bodies,
+                           const std::string& stationBodyName ) const override;
+
+    std::vector< std::string > createGroundStations(
+        simulation_setup::SystemOfBodies& bodies,
+        const std::string& stationBodyName ) const override;
+
+    std::vector< observation_models::LinkDefinition > getLinkDefinitions(
+        const std::string& stationBodyName,
+        const std::string& targetNameOverride = "" ) const override;
+
+    std::shared_ptr< observation_models::ObservationCollection< ObservationScalarType, TimeType > >
+    getObservationCollection( const std::string& stationBodyName,
+                              const std::string& targetNameOverride = "" ) const override;
+
+    std::shared_ptr< observation_models::ObservationCollection< ObservationScalarType, TimeType > >
+    toTudat( simulation_setup::SystemOfBodies& bodies,
+             const std::string& stationBodyName = "Earth",
+             const std::string& targetNameOverride = "" ) override;
+
+    std::string getTargetId( ) const override { return parser_.getMetadata( ).targetId; }
+    
+    // These now return empty strings since there may be multiple station pairs
+    std::string getStation1Id( ) const override { return ""; }
+    std::string getStation2Id( ) const override { return ""; }
+    
+    size_t getNumObservations( ) const override { return parser_.getNumObservations( ); }
+
+    // ========================================
+    // UTAS-specific methods
+    // ========================================
 
     /**
-     * @brief Add observation set from file
+     * @brief Get full UTAS metadata
      */
-    void addFromFile( const std::string& filePath );
+    const UTASMetadata& getMetadata( ) const { return parser_.getMetadata( ); }
 
     /**
-     * @brief Add observation set directly
+     * @brief Get all unique station pairs
      */
-    void addSet( std::shared_ptr< UTASObservationSet > observationSet );
+    std::vector< StationPair > getStationPairs( ) const { return parser_.getStationPairs( ); }
 
     /**
-     * @brief Get unique observatory names
+     * @brief Get all unique station names
      */
-    std::set< std::string > getObservatoryNames( ) const;
+    std::set< std::string > getStationNames( ) const { return parser_.getStationNames( ); }
 
     /**
-     * @brief Get observatory positions (lon, lat in degrees; alt in km)
+     * @brief Get number of station pairs
      */
-    std::map< std::string, GeodeticPosition > getObservatoryPositions( ) const;
+    size_t getNumStationPairs( ) const { return parser_.getStationPairs( ).size( ); }
 
     /**
-     * @brief Get unique observed target IDs
+     * @brief Get observation epochs (TDB seconds since J2000) - all station pairs concatenated
      */
-    std::set< std::string > getObservedTargets( ) const;
+    const std::vector< TimeType >& getEpochs( ) const { return parser_.getEpochs( ); }
 
     /**
-     * @brief Get all observations organized by target and station pair
+     * @brief Get TDOA observations (seconds) - all station pairs concatenated
      */
-    const std::map< std::string, std::map< std::pair< std::string, std::string >, std::vector< std::shared_ptr< UTASObservationSet > > > >&
-    getAllObservations( ) const
-    {
-        return observationsByTarget_;
-    }
+    const std::vector< ObservationScalarType >& getTdoaObservations( ) const { return parser_.getTdoaObservations( ); }
+
+    /**
+     * @brief Get TDOA uncertainties (seconds) - all station pairs concatenated
+     */
+    const std::vector< ObservationScalarType >& getTdoaUncertainties( ) const { return parser_.getTdoaUncertainties( ); }
+
+    /**
+     * @brief Get FDOA observations (Hz) - all station pairs concatenated
+     */
+    const std::vector< ObservationScalarType >& getFdoaObservations( ) const { return parser_.getFdoaObservations( ); }
+
+    /**
+     * @brief Get FDOA uncertainties (Hz) - all station pairs concatenated
+     */
+    const std::vector< ObservationScalarType >& getFdoaUncertainties( ) const { return parser_.getFdoaUncertainties( ); }
 
 private:
-    // Observations indexed by: target -> (station1, station2) -> observation sets
-    std::map< std::string, std::map< std::pair< std::string, std::string >, std::vector< std::shared_ptr< UTASObservationSet > > > >
-            observationsByTarget_;
-
-    // Station positions (accumulated from all sets)
-    std::map< std::string, GeodeticPosition > stationPositions_;
+    UTASParser< ObservationScalarType, TimeType > parser_;
 };
 
 // ============================================================================
-// TUDAT CONVERTER
+// EXPLICIT TEMPLATE INSTANTIATION DECLARATIONS
 // ============================================================================
 
-/**
- * @brief Formatter/converter for UTAS data to Tudat format
- *
- * Handles unit conversions and creates Tudat-compatible observation collections.
- */
-class UTASTudatFormatter
-{
-public:
-    /**
-     * @brief Angular unit for geodetic coordinates
-     */
-    enum class AngleUnit { Degrees, Radians };
-
-    /**
-     * @brief Length unit for altitude
-     */
-    enum class LengthUnit { Meters, Kilometers };
-
-    /**
-     * @brief Construct formatter with unit specifications
-     * @param inputAngleUnit Unit of input angular coordinates (from UTAS: Degrees)
-     * @param inputLengthUnit Unit of input altitude (from UTAS: Kilometers)
-     */
-    UTASTudatFormatter( AngleUnit inputAngleUnit = AngleUnit::Degrees, LengthUnit inputLengthUnit = LengthUnit::Kilometers ):
-        inputAngleUnit_( inputAngleUnit ), inputLengthUnit_( inputLengthUnit )
-    {}
-
-    /**
-     * @brief Convert UTAS observation collection to Tudat format
-     *
-     * Creates ground stations and observation sets in Tudat format.
-     *
-     * @param collection UTAS observation collection
-     * @param bodies System of bodies (will be modified to add stations)
-     * @param includedTargets List of target IDs to include (empty = all)
-     * @param stationBody Body on which to place ground stations (default: "Earth")
-     * @return Tudat observation collection
-     */
-    std::shared_ptr< tom::ObservationCollection< double, Time > > toTudat( const UTASObservationCollection& collection,
-                                                                           simulation_setup::SystemOfBodies& bodies,
-                                                                           const std::vector< std::string >& includedTargets = { },
-                                                                           const std::string& stationBodyName = "Earth" );
-
-private:
-    /**
-     * @brief Convert geodetic position to Tudat format (radians, meters)
-     */
-    Eigen::Vector3d convertToTudatGeodetic( const GeodeticPosition& pos ) const;
-
-    AngleUnit inputAngleUnit_;
-    LengthUnit inputLengthUnit_;
-};
-
-// ============================================================================
-// BATCH VLBI (Convenience class)
-// ============================================================================
-
-/**
- * @brief Convenience class for loading batch VLBI observations
- *
- * Combines UTASObservationCollection and UTASTudatFormatter for easy use.
- */
-class BatchVLBI
-{
-public:
-    /**
-     * @brief Construct from list of JSON file paths
-     */
-    explicit BatchVLBI( const std::vector< std::string >& filePaths );
-    /**
-     * @brief Convert to Tudat observation collection
-     *
-     * Creates ground stations and returns observations in Tudat format.
-     */
-    std::shared_ptr< tom::ObservationCollection< double, Time > > toTudat( simulation_setup::SystemOfBodies& bodies,
-                                                                        const std::vector< std::string >& includedTargets = { },
-                                                                        const std::string& stationBody = "Earth" );
-    /**
-     * @brief Get underlying observation collection
-     */
-    const UTASObservationCollection& getCollection( ) const
-    {
-        return collection_;
-    }
-private:
-    UTASObservationCollection collection_;
-    UTASTudatFormatter formatter_;
-};
+extern template class UTASParser< double, double >;
+extern template class UTASParser< double, Time >;
+extern template class BatchUTAS< double, double >;
+extern template class BatchUTAS< double, Time >;
 
 }  // namespace io
 }  // namespace tudat
 
-#endif  // TUDAT_UNIFIED_DATA_LIBRARY_READER_H
+#endif  // TUDAT_UNIFIED_DATA_LIBRARY_READER_NEW_H

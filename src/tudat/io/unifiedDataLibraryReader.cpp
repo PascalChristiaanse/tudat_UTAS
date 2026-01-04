@@ -1,5 +1,5 @@
 /*    Copyright (c) 2010-2019, Delft University of Technology
- *    All rigths reserved
+ *    All rights reserved
  *
  *    This file is part of the Tudat. Redistribution and use in source and
  *    binary forms, with or without modification, are permitted exclusively
@@ -15,6 +15,8 @@
 #include <sstream>
 
 #include "tudat/astro/basic_astro/oblateSpheroidBodyShapeModel.h"
+#include "tudat/astro/basic_astro/timeConversions.h"
+#include "tudat/astro/earth_orientation/terrestrialTimeScaleConverter.h"
 
 namespace tudat
 {
@@ -24,15 +26,16 @@ namespace io
 using json = nlohmann::json;
 
 // ============================================================================
-// UTASObservationSet Implementation
+// UTASParser Implementation
 // ============================================================================
 
+template< typename ObservationScalarType, typename TimeType >
 template< typename T >
-T UTASObservationSet::getRequired( const json& obj, const std::string& key )
+T UTASParser< ObservationScalarType, TimeType >::getRequired( const json& obj, const std::string& key )
 {
     if( !obj.contains( key ) )
     {
-        throw std::runtime_error( "UTASObservationSet: Required field '" + key + "' not found" );
+        throw std::runtime_error( "UTASParser: Required field '" + key + "' not found" );
     }
 
     try
@@ -41,12 +44,13 @@ T UTASObservationSet::getRequired( const json& obj, const std::string& key )
     }
     catch( const json::type_error& e )
     {
-        throw std::runtime_error( "UTASObservationSet: Field '" + key + "' has wrong type: " + e.what( ) );
+        throw std::runtime_error( "UTASParser: Field '" + key + "' has wrong type: " + e.what( ) );
     }
 }
 
+template< typename ObservationScalarType, typename TimeType >
 template< typename T >
-T UTASObservationSet::getOptional( const json& obj, const std::string& key, const T& defaultValue )
+T UTASParser< ObservationScalarType, TimeType >::getOptional( const json& obj, const std::string& key, const T& defaultValue )
 {
     if( !obj.contains( key ) )
     {
@@ -63,16 +67,12 @@ T UTASObservationSet::getOptional( const json& obj, const std::string& key, cons
     }
 }
 
-/**
- * @brief Get a string field that may be stored as number in JSON
- *
- * Some fields like "satNo" are semantically identifiers (strings) but stored as numbers.
- */
-static std::string getStringOrNumber( const json& obj, const std::string& key )
+template< typename ObservationScalarType, typename TimeType >
+std::string UTASParser< ObservationScalarType, TimeType >::getStringOrNumber( const json& obj, const std::string& key )
 {
     if( !obj.contains( key ) )
     {
-        throw std::runtime_error( "UTASObservationSet: Required field '" + key + "' not found" );
+        throw std::runtime_error( "UTASParser: Required field '" + key + "' not found" );
     }
 
     const auto& val = obj[ key ];
@@ -86,242 +86,67 @@ static std::string getStringOrNumber( const json& obj, const std::string& key )
     }
     else if( val.is_number( ) )
     {
-        // For floating point, convert but this is unusual for IDs
         std::ostringstream oss;
         oss << val.get< double >( );
         return oss.str( );
     }
     else
     {
-        throw std::runtime_error( "UTASObservationSet: Field '" + key + "' must be string or number" );
+        throw std::runtime_error( "UTASParser: Field '" + key + "' must be string or number" );
     }
 }
 
-UTASObservationSet::UTASObservationSet( const json& j )
+template< typename ObservationScalarType, typename TimeType >
+UTASParser< ObservationScalarType, TimeType >::UTASParser( const std::vector< std::string >& filePaths )
 {
-    // Initialize time converter
-    timeConverter_ = std::make_shared< teo::TerrestrialTimeScaleConverter >( );
-
-    // Validate input is array
-    if( !j.is_array( ) )
-    {
-        throw std::runtime_error( "UTASObservationSet: JSON input must be an array of observations" );
-    }
-
-    if( j.empty( ) )
-    {
-        throw std::runtime_error( "UTASObservationSet: Observation array is empty" );
-    }
-
-    // Parse metadata from first observation
-    parseMetadata( j[ 0 ] );
-
-    // Validate constant fields are consistent across all observations
-    validateMetadataConsistency( j );
-
-    // Parse time-varying data
-    parseTimeSeries( j );
-
-    // Final validation
-    if( !timeSeries_.isConsistent( ) )
-    {
-        throw std::runtime_error( "UTASObservationSet: Time series data is inconsistent" );
-    }
+    this->filePaths_ = filePaths;
+    parseFiles( );
 }
 
-void UTASObservationSet::parseMetadata( const json& firstObs )
+template< typename ObservationScalarType, typename TimeType >
+void UTASParser< ObservationScalarType, TimeType >::parseFiles( )
 {
-    // Station 1 identification and position
-    metadata_.station1Id = getRequired< std::string >( firstObs, "origSensorId1" );
-    metadata_.station1Position.latitude = getRequired< double >( firstObs, "senlat" );
-    metadata_.station1Position.longitude = getRequired< double >( firstObs, "senlon" );
-    metadata_.station1Position.altitude = getRequired< double >( firstObs, "senalt" );
-
-    // Station 2 identification and position
-    metadata_.station2Id = getRequired< std::string >( firstObs, "origSensorId2" );
-    metadata_.station2Position.latitude = getRequired< double >( firstObs, "sen2lat" );
-    metadata_.station2Position.longitude = getRequired< double >( firstObs, "sen2lon" );
-    metadata_.station2Position.altitude = getRequired< double >( firstObs, "sen2alt" );
-
-    // Target identification (may be number in JSON)
-    metadata_.targetId = getStringOrNumber( firstObs, "satNo" );
-
-    // Observation parameters
-    metadata_.frequency = getRequired< double >( firstObs, "frequency" );
-    metadata_.dataMode = getOptional< std::string >( firstObs, "dataMode", "" );
-    metadata_.origin = getOptional< std::string >( firstObs, "origin", "" );
-    metadata_.source = getOptional< std::string >( firstObs, "source", "" );
-
-    // UTAS-specific fields
-    sensor1Delay_ = getOptional< double >( firstObs, "sensor1Delay", 0.0 );
-    sensor2Delay_ = getOptional< double >( firstObs, "sensor2Delay", 0.0 );
-    bandwidth_ = getOptional< double >( firstObs, "bandwidth", 0.0 );
-    ucts_ = getOptional< int >( firstObs, "ucts", 0 );
-
-    // Validate positions are not zero (common parsing error indicator)
-    if( metadata_.station1Position.isZero( ) )
+    for( const auto& path : this->filePaths_ )
     {
-        std::cerr << "WARNING: Station 1 position is (0,0,0) - this may indicate a parsing error" << std::endl;
+        parseFile( path );
     }
-    if( metadata_.station2Position.isZero( ) )
+
+    if( observationsByStationPair_.empty( ) )
     {
-        std::cerr << "WARNING: Station 2 position is (0,0,0) - this may indicate a parsing error" << std::endl;
+        throw std::runtime_error( "UTASParser: No observations found in provided files" );
     }
+
+    // Build concatenated vectors for legacy interface
+    rebuildConcatenatedVectors( );
 }
 
-void UTASObservationSet::validateMetadataConsistency( const json& observations )
+template< typename ObservationScalarType, typename TimeType >
+void UTASParser< ObservationScalarType, TimeType >::rebuildConcatenatedVectors( )
 {
-    const json& first = observations[ 0 ];
+    allEpochs_.clear( );
+    allTdoa_.clear( );
+    allTdoaUnc_.clear( );
+    allFdoa_.clear( );
+    allFdoaUnc_.clear( );
 
-    // List of fields that must be constant across all observations
-    std::vector< std::string > constantStringFields = { "origSensorId1", "origSensorId2", "dataMode", "origin", "source" };
-    std::vector< std::string > constantStringOrNumberFields = {
-        "satNo"  // May be stored as number in JSON
-    };
-    std::vector< std::string > constantDoubleFields = { "senlat", "senlon", "senalt", "sen2lat", "sen2lon", "sen2alt", "frequency" };
-
-    for( size_t i = 1; i < observations.size( ); ++i )
+    for( const auto& entry : observationsByStationPair_ )
     {
-        const json& obs = observations[ i ];
-
-        // Check string fields
-        for( const auto& field : constantStringFields )
-        {
-            if( obs.contains( field ) && first.contains( field ) )
-            {
-                if( obs[ field ].get< std::string >( ) != first[ field ].get< std::string >( ) )
-                {
-                    throw std::runtime_error( "UTASObservationSet: Metadata field '" + field +
-                                              "' varies between observations (expected constant). " +
-                                              "First value: " + first[ field ].get< std::string >( ) + ", observation " +
-                                              std::to_string( i ) + " value: " + obs[ field ].get< std::string >( ) );
-                }
-            }
-        }
-
-        // Check fields that may be string or number (like satNo)
-        for( const auto& field : constantStringOrNumberFields )
-        {
-            if( obs.contains( field ) && first.contains( field ) )
-            {
-                std::string firstVal = getStringOrNumber( first, field );
-                std::string obsVal = getStringOrNumber( obs, field );
-                if( firstVal != obsVal )
-                {
-                    throw std::runtime_error( "UTASObservationSet: Metadata field '" + field +
-                                              "' varies between observations (expected constant). " + "First value: " + firstVal +
-                                              ", observation " + std::to_string( i ) + " value: " + obsVal );
-                }
-            }
-        }
-
-        // Check double fields with tolerance
-        const double tolerance = 1e-9;
-        for( const auto& field : constantDoubleFields )
-        {
-            if( obs.contains( field ) && first.contains( field ) )
-            {
-                double firstVal = first[ field ].get< double >( );
-                double obsVal = obs[ field ].get< double >( );
-                if( std::abs( firstVal - obsVal ) > tolerance )
-                {
-                    throw std::runtime_error( "UTASObservationSet: Metadata field '" + field +
-                                              "' varies between observations (expected constant). " +
-                                              "First value: " + std::to_string( firstVal ) + ", observation " + std::to_string( i ) +
-                                              " value: " + std::to_string( obsVal ) );
-                }
-            }
-        }
+        const auto& obs = entry.second;
+        allEpochs_.insert( allEpochs_.end( ), obs.epochs.begin( ), obs.epochs.end( ) );
+        allTdoa_.insert( allTdoa_.end( ), obs.tdoa.begin( ), obs.tdoa.end( ) );
+        allTdoaUnc_.insert( allTdoaUnc_.end( ), obs.tdoaUnc.begin( ), obs.tdoaUnc.end( ) );
+        allFdoa_.insert( allFdoa_.end( ), obs.fdoa.begin( ), obs.fdoa.end( ) );
+        allFdoaUnc_.insert( allFdoaUnc_.end( ), obs.fdoaUnc.begin( ), obs.fdoaUnc.end( ) );
     }
 }
 
-void UTASObservationSet::parseTimeSeries( const json& observations )
-{
-    size_t numObs = observations.size( );
-
-    // Reserve space
-    timeSeries_.epochs.reserve( numObs );
-    timeSeries_.tdoa.reserve( numObs );
-    timeSeries_.tdoaUnc.reserve( numObs );
-    timeSeries_.fdoa.reserve( numObs );
-    timeSeries_.fdoaUnc.reserve( numObs );
-
-    for( const auto& obs : observations )
-    {
-        // Time (required)
-        std::string obTime = getRequired< std::string >( obs, "obTime" );
-        double epoch = convertIsoStringToEpoch( obTime );
-        timeSeries_.epochs.push_back( epoch );
-
-        // TDOA (required)
-        timeSeries_.tdoa.push_back( getRequired< double >( obs, "tdoa" ) );
-        timeSeries_.tdoaUnc.push_back( getOptional< double >( obs, "tdoaUnc", 0.0 ) );
-
-        // FDOA (required)
-        timeSeries_.fdoa.push_back( getRequired< double >( obs, "fdoa" ) );
-        timeSeries_.fdoaUnc.push_back( getOptional< double >( obs, "fdoaUnc", 0.0 ) );
-    }
-}
-
-double UTASObservationSet::convertIsoStringToEpoch( const std::string& isoTime )
-{
-    // Strip trailing 'Z' if present
-    std::string timeStr = isoTime;
-    if( !timeStr.empty( ) && ( timeStr.back( ) == 'Z' || timeStr.back( ) == 'z' ) )
-    {
-        timeStr.pop_back( );
-    }
-
-    // Parse ISO 8601 format: YYYY-MM-DDTHH:MM:SS.sss
-    if( timeStr.length( ) < 19 )
-    {
-        throw std::runtime_error( "UTASObservationSet: Invalid time format: " + isoTime );
-    }
-
-    try
-    {
-        // int year = std::stoi( timeStr.substr( 0, 4 ) );
-        // int month = std::stoi( timeStr.substr( 5, 2 ) );
-        // int day = std::stoi( timeStr.substr( 8, 2 ) );
-        // int hour = std::stoi( timeStr.substr( 11, 2 ) );
-        // int minute = std::stoi( timeStr.substr( 14, 2 ) );
-        // double second = std::stod( timeStr.substr( 17 ) );
-
-        // Convert to Julian day then to seconds since J2000 (UTC)
-        // double timeInUTC = tba::timeFromDecomposedDateTime< double >( year, month, day, hour, minute, second );
-        tudat::Time timeInUTC = tba::timeFromIsoString< tudat::Time >( timeStr );
-        // Convert UTC to TDB using time scale converter
-        // Use a dummy position @ TODO improve with actual station position
-        Eigen::Vector3d dummyPosition( 6378.0e3, 0.0, 0.0 );
-        double timeInTDB = timeConverter_->getCurrentTime< double >(
-                tba::TimeScales::utc_scale, tba::TimeScales::tdb_scale, timeInUTC, dummyPosition );
-
-        return timeInTDB;
-    }
-    catch( const std::exception& e )
-    {
-        throw std::runtime_error( "UTASObservationSet: Failed to parse time '" + timeStr + "': " + e.what( ) );
-    }
-}
-
-// ============================================================================
-// UTASObservationCollection Implementation
-// ============================================================================
-
-UTASObservationCollection::UTASObservationCollection( const std::vector< std::string >& filePaths )
-{
-    for( const auto& path : filePaths )
-    {
-        addFromFile( path );
-    }
-}
-
-void UTASObservationCollection::addFromFile( const std::string& filePath )
+template< typename ObservationScalarType, typename TimeType >
+void UTASParser< ObservationScalarType, TimeType >::parseFile( const std::string& filePath )
 {
     std::ifstream file( filePath );
     if( !file.is_open( ) )
     {
-        throw std::runtime_error( "UTASObservationCollection: Cannot open file: " + filePath );
+        throw std::runtime_error( "UTASParser: Cannot open file: " + filePath );
     }
 
     json j;
@@ -331,7 +156,7 @@ void UTASObservationCollection::addFromFile( const std::string& filePath )
     }
     catch( const json::parse_error& e )
     {
-        throw std::runtime_error( "UTASObservationCollection: JSON parse error in " + filePath + ": " + e.what( ) );
+        throw std::runtime_error( "UTASParser: JSON parse error in " + filePath + ": " + e.what( ) );
     }
 
     // Handle different JSON structures
@@ -346,271 +171,419 @@ void UTASObservationCollection::addFromFile( const std::string& filePath )
     }
     else
     {
-        throw std::runtime_error( "UTASObservationCollection: Unexpected JSON structure in " + filePath );
+        throw std::runtime_error( "UTASParser: Unexpected JSON structure in " + filePath );
     }
 
-    auto observationSet = std::make_shared< UTASObservationSet >( observations );
-    addSet( observationSet );
+    if( observations.empty( ) )
+    {
+        std::cerr << "WARNING: UTASParser: File " << filePath << " contains no observations" << std::endl;
+        return;
+    }
+
+    parseObservationArray( observations, filePath );
 }
 
-void UTASObservationCollection::addSet( std::shared_ptr< UTASObservationSet > observationSet )
+template< typename ObservationScalarType, typename TimeType >
+void UTASParser< ObservationScalarType, TimeType >::parseObservationArray( const json& observations, const std::string& filePath )
 {
-    const auto& meta = observationSet->getMetadata( );
+    const json& firstObs = observations[ 0 ];
 
-    // Index by target and station pair
-    std::string target = meta.targetId;
-    auto stationPair = std::make_pair( meta.station1Id, meta.station2Id );
+    // Extract target and validate single-target constraint
+    std::string targetId = getStringOrNumber( firstObs, "satNo" );
+    foundTargets_.insert( targetId );
+    validateSingleTarget( targetId, filePath );
 
-    observationsByTarget_[ target ][ stationPair ].push_back( observationSet );
+    // Extract station info for this file
+    std::string station1Id = getRequired< std::string >( firstObs, "origSensorId1" );
+    std::string station2Id = getRequired< std::string >( firstObs, "origSensorId2" );
+    StationPair stationPair = std::make_pair( station1Id, station2Id );
 
-    // Accumulate station positions
-    if( stationPositions_.find( meta.station1Id ) == stationPositions_.end( ) )
+    // Extract station positions
+    GeodeticPositionNew station1Pos;
+    station1Pos.latitude = getRequired< double >( firstObs, "senlat" );
+    station1Pos.longitude = getRequired< double >( firstObs, "senlon" );
+    station1Pos.altitude = getRequired< double >( firstObs, "senalt" );
+
+    GeodeticPositionNew station2Pos;
+    station2Pos.latitude = getRequired< double >( firstObs, "sen2lat" );
+    station2Pos.longitude = getRequired< double >( firstObs, "sen2lon" );
+    station2Pos.altitude = getRequired< double >( firstObs, "sen2alt" );
+
+    // Store station positions (will overwrite if already exists, positions should be consistent)
+    stationPositions_[ station1Id ] = station1Pos;
+    stationPositions_[ station2Id ] = station2Pos;
+
+    // Initialize metadata from first file
+    if( !metadataInitialized_ )
     {
-        stationPositions_[ meta.station1Id ] = meta.station1Position;
+        metadata_.targetId = targetId;
+        metadata_.frequency = getRequired< double >( firstObs, "frequency" );
+        metadata_.bandwidth = getOptional< double >( firstObs, "bandwidth", 0.0 );
+        metadata_.sensor1Delay = getOptional< double >( firstObs, "sensor1Delay", 0.0 );
+        metadata_.sensor2Delay = getOptional< double >( firstObs, "sensor2Delay", 0.0 );
+        metadata_.dataMode = getOptional< std::string >( firstObs, "dataMode", "" );
+        metadata_.origin = getOptional< std::string >( firstObs, "origin", "" );
+        metadata_.source = getOptional< std::string >( firstObs, "source", "" );
+        metadata_.ucts = getOptional< int >( firstObs, "ucts", 0 );
+
+        metadataInitialized_ = true;
     }
-    if( stationPositions_.find( meta.station2Id ) == stationPositions_.end( ) )
+
+    // Validate positions
+    if( station1Pos.isZero( ) )
     {
-        stationPositions_[ meta.station2Id ] = meta.station2Position;
+        std::cerr << "WARNING: Station " << station1Id << " position is (0,0,0) in " << filePath << std::endl;
+    }
+    if( station2Pos.isZero( ) )
+    {
+        std::cerr << "WARNING: Station " << station2Id << " position is (0,0,0) in " << filePath << std::endl;
+    }
+
+    // Get or create observation storage for this station pair
+    auto& stationObs = observationsByStationPair_[ stationPair ];
+
+    // Reserve space for new observations
+    size_t numObs = observations.size( );
+    stationObs.epochs.reserve( stationObs.epochs.size( ) + numObs );
+    stationObs.tdoa.reserve( stationObs.tdoa.size( ) + numObs );
+    stationObs.tdoaUnc.reserve( stationObs.tdoaUnc.size( ) + numObs );
+    stationObs.fdoa.reserve( stationObs.fdoa.size( ) + numObs );
+    stationObs.fdoaUnc.reserve( stationObs.fdoaUnc.size( ) + numObs );
+
+    // Parse time series data
+    for( const auto& obs : observations )
+    {
+        // Check target consistency within file
+        std::string obsTarget = getStringOrNumber( obs, "satNo" );
+        foundTargets_.insert( obsTarget );
+        validateSingleTarget( obsTarget, filePath );
+
+        // Time
+        std::string obTime = getRequired< std::string >( obs, "obTime" );
+        TimeType epoch = convertIsoStringToEpoch( obTime );
+        stationObs.epochs.push_back( epoch );
+
+        // TDOA
+        stationObs.tdoa.push_back( static_cast< ObservationScalarType >( getRequired< double >( obs, "tdoa" ) ) );
+        stationObs.tdoaUnc.push_back( static_cast< ObservationScalarType >( getOptional< double >( obs, "tdoaUnc", 0.0 ) ) );
+
+        // FDOA
+        stationObs.fdoa.push_back( static_cast< ObservationScalarType >( getRequired< double >( obs, "fdoa" ) ) );
+        stationObs.fdoaUnc.push_back( static_cast< ObservationScalarType >( getOptional< double >( obs, "fdoaUnc", 0.0 ) ) );
     }
 }
 
-std::set< std::string > UTASObservationCollection::getObservatoryNames( ) const
+template< typename ObservationScalarType, typename TimeType >
+void UTASParser< ObservationScalarType, TimeType >::validateSingleTarget( const std::string& newTargetId, const std::string& filePath )
 {
-    std::set< std::string > names;
+    if( foundTargets_.size( ) > 1 )
+    {
+        std::ostringstream oss;
+        oss << "UTASParser: Multiple targets detected. BatchUTAS only supports single-target data.\n";
+        oss << "Found targets: ";
+        bool first = true;
+        for( const auto& t : foundTargets_ )
+        {
+            if( !first ) oss << ", ";
+            oss << "'" << t << "'";
+            first = false;
+        }
+        oss << "\n";
+        oss << "Please create separate BatchUTAS instances for each target by filtering input files.\n";
+        oss << "Error occurred while parsing: " << filePath;
+        throw std::runtime_error( oss.str( ) );
+    }
+}
+
+template< typename ObservationScalarType, typename TimeType >
+TimeType UTASParser< ObservationScalarType, TimeType >::convertIsoStringToEpoch( const std::string& isoTime )
+{
+    // Strip trailing 'Z' if present
+    std::string timeStr = isoTime;
+    if( !timeStr.empty( ) && ( timeStr.back( ) == 'Z' || timeStr.back( ) == 'z' ) )
+    {
+        timeStr.pop_back( );
+    }
+
+    if( timeStr.length( ) < 19 )
+    {
+        throw std::runtime_error( "UTASParser: Invalid time format: " + isoTime );
+    }
+
+    try
+    {
+        // Parse ISO string to Time
+        tudat::Time timeInUTC = basic_astrodynamics::timeFromIsoString< tudat::Time >( timeStr );
+
+        // Convert UTC to TDB
+        auto timeConverter = std::make_shared< earth_orientation::TerrestrialTimeScaleConverter >( );
+        Eigen::Vector3d dummyPosition( 6378.0e3, 0.0, 0.0 );
+        double timeInTDB = timeConverter->getCurrentTime< double >(
+            basic_astrodynamics::TimeScales::utc_scale,
+            basic_astrodynamics::TimeScales::tdb_scale,
+            timeInUTC,
+            dummyPosition );
+
+        return static_cast< TimeType >( timeInTDB );
+    }
+    catch( const std::exception& e )
+    {
+        throw std::runtime_error( "UTASParser: Failed to parse time '" + timeStr + "': " + e.what( ) );
+    }
+}
+
+template< typename ObservationScalarType, typename TimeType >
+std::vector< tudat::io::StationPair > UTASParser< ObservationScalarType, TimeType >::getStationPairs( ) const
+{
+    std::vector< tudat::io::StationPair > pairs;
+    for( const auto& entry : observationsByStationPair_ )
+    {
+        pairs.push_back( entry.first );
+    }
+    return pairs;
+}
+
+template< typename ObservationScalarType, typename TimeType >
+std::set< std::string > UTASParser< ObservationScalarType, TimeType >::getStationNames( ) const
+{
+    std::set< std::string > uniqueStations;
     for( const auto& entry : stationPositions_ )
     {
-        names.insert( entry.first );
+        uniqueStations.insert( entry.first );
     }
-    return names;
+    return uniqueStations;
 }
 
-std::map< std::string, GeodeticPosition > UTASObservationCollection::getObservatoryPositions( ) const
+template< typename ObservationScalarType, typename TimeType >
+Eigen::Vector3d UTASParser< ObservationScalarType, TimeType >::getStationTudatPosition( const std::string& stationName ) const
 {
-    return stationPositions_;
-}
-
-std::set< std::string > UTASObservationCollection::getObservedTargets( ) const
-{
-    std::set< std::string > targets;
-    for( const auto& entry : observationsByTarget_ )
+    auto it = stationPositions_.find( stationName );
+    if( it == stationPositions_.end( ) )
     {
-        targets.insert( entry.first );
+        throw std::runtime_error( "UTASParser: Station '" + stationName + "' not found" );
     }
-    return targets;
+    return it->second.toTudatGeodetic( );
+}
+
+template< typename ObservationScalarType, typename TimeType >
+const StationPairObservations< ObservationScalarType, TimeType >&
+UTASParser< ObservationScalarType, TimeType >::getObservationsForStationPair( const StationPair& stationPair ) const
+{
+    auto it = observationsByStationPair_.find( stationPair );
+    if( it == observationsByStationPair_.end( ) )
+    {
+        throw std::runtime_error( "UTASParser: Station pair (" + stationPair.first + ", " + stationPair.second + ") not found" );
+    }
+    return it->second;
 }
 
 // ============================================================================
-// UTASTudatFormatter Implementation
+// BatchUTAS Implementation
 // ============================================================================
 
-Eigen::Vector3d UTASTudatFormatter::convertToTudatGeodetic( const GeodeticPosition& pos ) const
+template< typename ObservationScalarType, typename TimeType >
+BatchUTAS< ObservationScalarType, TimeType >::BatchUTAS( const std::vector< std::string >& filePaths ):
+    parser_( filePaths )
 {
-    double longitude = pos.longitude;
-    double latitude = pos.latitude;
-    double altitude = pos.altitude;
-
-    // Convert angles to radians if needed
-    if( inputAngleUnit_ == AngleUnit::Degrees )
-    {
-        longitude *= mathematical_constants::PI / 180.0;
-        latitude *= mathematical_constants::PI / 180.0;
-    }
-
-    // Convert altitude to meters if needed
-    if( inputLengthUnit_ == LengthUnit::Kilometers )
-    {
-        altitude *= 1000.0;
-    }
-
-    return GeodeticPosition( altitude, latitude, longitude ).toEigenVector( );
 }
 
-std::shared_ptr< tom::ObservationCollection< double, Time > > UTASTudatFormatter::toTudat(
-        const UTASObservationCollection& collection,
-        simulation_setup::SystemOfBodies& bodies,
-        const std::vector< std::string >& includedTargets,
-        const std::string& stationBodyName )
+template< typename ObservationScalarType, typename TimeType >
+void BatchUTAS< ObservationScalarType, TimeType >::ensureShapeModel(
+    simulation_setup::SystemOfBodies& bodies,
+    const std::string& stationBodyName ) const
 {
-    using tudat::Time;
-
-    // ======================================================
-    // Ensure station body exists
-    // ======================================================
+    // Ensure body exists
     try
     {
         bodies.getBody( stationBodyName );
     }
-    // If the station body does not exist, create it now
-    catch( const std::runtime_error& e )
+    catch( const std::runtime_error& )
     {
-        std::cout << "Runtime error caught: " << e.what( ) << std::endl;
         bodies.addBody( std::make_shared< simulation_setup::Body >( ), stationBodyName );
     }
 
-    // If theres no shape model yet, set the oblate spheroid model from SPICE
-    if( bodies.getBody( stationBodyName )->getShapeModel( ) == nullptr )
+    auto body = bodies.getBody( stationBodyName );
+
+    // If no shape model, create oblate spheroid from SPICE
+    if( body->getShapeModel( ) == nullptr )
     {
-        auto new_shape_model =
-                simulation_setup::createBodyShapeModel( simulation_setup::fromSpiceOblateSphericalBodyShapeSettings( ), stationBodyName );
-        bodies.getBody( stationBodyName )->setShapeModel( new_shape_model );
+        auto shapeModel = simulation_setup::createBodyShapeModel(
+            simulation_setup::fromSpiceOblateSphericalBodyShapeSettings( ), stationBodyName );
+        body->setShapeModel( shapeModel );
     }
-    // If there is a shapemodel and its not oblate spheroid, throw error
+    // If shape model exists but is not oblate spheroid, throw error
     else if( std::dynamic_pointer_cast< basic_astrodynamics::OblateSpheroidBodyShapeModel >(
-                     bodies.getBody( stationBodyName )->getShapeModel( ) ) == nullptr )
+                 body->getShapeModel( ) ) == nullptr )
     {
-        throw std::runtime_error( "UTASTudatFormatter: Station body " + stationBodyName +
-                                  " has incompatible shape model. Must use OblateSpheroidBodyShapeModel" );
+        throw std::runtime_error( "BatchUTAS: Station body '" + stationBodyName +
+                                  "' has incompatible shape model. Must use OblateSpheroidBodyShapeModel for ground stations." );
     }
-
-    // ======================================================
-    // Create ground stations
-    // ======================================================
-    auto observatoryPositions = collection.getObservatoryPositions( );
-    for( const auto& entry : observatoryPositions )
-    {
-        const std::string& stationName = entry.first;
-        const GeodeticPosition& pos = entry.second;
-
-        std::cout << "Adding ground station " << stationName << " to body " << stationBodyName << std::endl;
-        std::cout << "    Input position (altitude, latitude, longitude) [km, deg, deg]: " << pos.altitude << ", " << pos.latitude << ", "
-                  << pos.longitude << std::endl;
-
-        Eigen::Vector3d tudatPos = convertToTudatGeodetic( pos );
-
-        std::cout << "    Tudat position (altitude, latitude, longitude) [m, rad, rad]: " << tudatPos( 0 ) << ", " << tudatPos( 1 ) << ", "
-                  << tudatPos( 2 ) << std::endl;
-
-        auto groundStationSettings = std::make_shared< simulation_setup::GroundStationSettings >(
-                stationName, tudatPos, coordinate_conversions::geodetic_position );
-
-        simulation_setup::createGroundStation( bodies.getBody( stationBodyName ), groundStationSettings );
-    }
-
-    // ======================================================
-    // Determine which targets to include
-    // ======================================================
-    std::set< std::string > targetSet;
-    if( includedTargets.empty( ) )
-    {
-        targetSet = collection.getObservedTargets( );
-    }
-    else
-    {
-        for( const auto& t : includedTargets )
-        {
-            targetSet.insert( t );
-        }
-    }
-
-    // Debug: print available and requested targets
-    std::cout << "Available targets in data: ";
-    for( const auto& t : collection.getObservedTargets( ) )
-    {
-        std::cout << "'" << t << "' ";
-    }
-    std::cout << std::endl;
-    std::cout << "Requested targets: ";
-    for( const auto& t : targetSet )
-    {
-        std::cout << "'" << t << "' ";
-    }
-    std::cout << std::endl;
-
-    // ======================================================
-    // Create empty bodies for targets
-    // ======================================================
-    // for( const auto& target : targetSet )
-    // {
-    //     try
-    //     {
-    //         bodies.getBody( target );
-    //         std::cout << "Target body " << target << " already exists" << std::endl;
-    //     }
-    //     catch( const std::runtime_error& )
-    //     {
-    //         bodies.addBody( std::make_shared< simulation_setup::Body >( ), target );
-    //     }
-    // }
-
-    // ======================================================
-    // Build observation sets
-    // ======================================================
-    std::vector< std::shared_ptr< tom::SingleObservationSet< double, Time > > > observationSetList;
-
-    const auto& allObs = collection.getAllObservations( );
-    for( const auto& targetEntry : allObs )
-    {
-        const std::string& target = targetEntry.first;
-        if( targetSet.find( target ) == targetSet.end( ) )
-        {
-            continue;  // Skip targets not in inclusion list
-        }
-
-        for( const auto& stationPairEntry : targetEntry.second )
-        {
-            const auto& stationPair = stationPairEntry.first;
-            const auto& observationSets = stationPairEntry.second;
-
-            const std::string& station1 = stationPair.first;
-            const std::string& station2 = stationPair.second;
-
-            // Create link definition
-            tom::LinkEnds linkEnds;
-            linkEnds[ tom::receiver ] = std::make_pair( stationBodyName, station1 );
-            linkEnds[ tom::receiver2 ] = std::make_pair( stationBodyName, station2 );
-            linkEnds[ tom::transmitter ] = std::make_pair( target, std::string( "" ) );
-            tom::LinkDefinition linkDefinition( linkEnds );
-
-            // Accumulate observations from all sets for this link
-            std::vector< Time > observationTimes;
-            std::vector< Eigen::VectorXd > tdoaObservations;
-            std::vector< Eigen::VectorXd > fdoaObservations;
-
-            for( const auto& obsSet : observationSets )
-            {
-                const auto& timeSeries = obsSet->getTimeSeries( );
-
-                for( size_t i = 0; i < timeSeries.size( ); ++i )
-                {
-                    observationTimes.push_back( Time( timeSeries.epochs[ i ] ) );
-
-                    Eigen::VectorXd tdoaEntry( 1 );
-                    tdoaEntry( 0 ) = timeSeries.tdoa[ i ];
-                    tdoaObservations.push_back( tdoaEntry );
-
-                    Eigen::VectorXd fdoaEntry( 1 );
-                    fdoaEntry( 0 ) = timeSeries.fdoa[ i ];
-                    fdoaObservations.push_back( fdoaEntry );
-                }
-            }
-
-            // Create TDOA observation set
-            auto tdoaSet = std::make_shared< tom::SingleObservationSet< double, Time > >(
-                    tom::differenced_time_of_arrival, linkDefinition, tdoaObservations, observationTimes, tom::receiver );
-            observationSetList.push_back( tdoaSet );
-
-            // Create FDOA observation set
-            auto fdoaSet = std::make_shared< tom::SingleObservationSet< double, Time > >(
-                    tom::differenced_frequency_of_arrival, linkDefinition, fdoaObservations, observationTimes, tom::receiver );
-            observationSetList.push_back( fdoaSet );
-        }
-    }
-
-    return std::make_shared< tom::ObservationCollection< double, Time > >( observationSetList );
 }
 
-// ============================================================================
-// BatchVLBI Implementation
-// ============================================================================
-
-BatchVLBI::BatchVLBI( const std::vector< std::string >& filePaths ): collection_( filePaths ), formatter_( ) {}
-
-std::shared_ptr< tom::ObservationCollection< double, Time > > BatchVLBI::toTudat( simulation_setup::SystemOfBodies& bodies,
-                                                                                  const std::vector< std::string >& includedTargets,
-                                                                                  const std::string& stationBody )
+template< typename ObservationScalarType, typename TimeType >
+std::vector< std::string > BatchUTAS< ObservationScalarType, TimeType >::createGroundStations(
+    simulation_setup::SystemOfBodies& bodies,
+    const std::string& stationBodyName ) const
 {
-    return formatter_.toTudat( collection_, bodies, includedTargets, stationBody );
+    std::vector< std::string > stationNames;
+    auto body = bodies.getBody( stationBodyName );
+
+    // Get all unique station names and their positions
+    std::set< std::string > uniqueStations = parser_.getStationNames( );
+
+    for( const auto& stationName : uniqueStations )
+    {
+        Eigen::Vector3d tudatPos = parser_.getStationTudatPosition( stationName );
+
+        std::cout << "Creating ground station '" << stationName << "' on '" << stationBodyName << "'" << std::endl;
+        std::cout << "    Position (alt[m], lat[rad], lon[rad]): " << tudatPos( 0 ) << ", "
+                  << tudatPos( 1 ) << ", " << tudatPos( 2 ) << std::endl;
+
+        auto settings = std::make_shared< simulation_setup::GroundStationSettings >(
+            stationName, tudatPos, coordinate_conversions::geodetic_position );
+        simulation_setup::createGroundStation( body, settings );
+        stationNames.push_back( stationName );
+    }
+
+    return stationNames;
 }
+
+template< typename ObservationScalarType, typename TimeType >
+std::vector< observation_models::LinkDefinition > BatchUTAS< ObservationScalarType, TimeType >::getLinkDefinitions(
+    const std::string& stationBodyName,
+    const std::string& targetNameOverride ) const
+{
+    const UTASMetadata& meta = parser_.getMetadata( );
+
+    // Use override if provided, otherwise use the target ID from data
+    std::string targetName = targetNameOverride.empty( ) ? meta.targetId : targetNameOverride;
+
+    std::vector< observation_models::LinkDefinition > linkDefinitions;
+    std::vector< StationPair > stationPairs = parser_.getStationPairs( );
+
+    for( const auto& stationPair : stationPairs )
+    {
+        observation_models::LinkEnds linkEnds;
+        linkEnds[ observation_models::receiver ] = std::make_pair( stationBodyName, stationPair.first );
+        linkEnds[ observation_models::receiver2 ] = std::make_pair( stationBodyName, stationPair.second );
+        linkEnds[ observation_models::transmitter ] = std::make_pair( targetName, std::string( "" ) );
+
+        linkDefinitions.push_back( observation_models::LinkDefinition( linkEnds ) );
+    }
+
+    return linkDefinitions;
+}
+
+template< typename ObservationScalarType, typename TimeType >
+std::shared_ptr< observation_models::ObservationCollection< ObservationScalarType, TimeType > >
+BatchUTAS< ObservationScalarType, TimeType >::getObservationCollection(
+    const std::string& stationBodyName,
+    const std::string& targetNameOverride ) const
+{
+    std::vector< observation_models::LinkDefinition > linkDefs = getLinkDefinitions( stationBodyName, targetNameOverride );
+    std::vector< StationPair > stationPairs = parser_.getStationPairs( );
+
+    // Create observation sets for each station pair
+    std::vector< std::shared_ptr< observation_models::SingleObservationSet< ObservationScalarType, TimeType > > > observationSetList;
+
+    for( size_t pairIdx = 0; pairIdx < stationPairs.size( ); ++pairIdx )
+    {
+        const StationPair& stationPair = stationPairs[ pairIdx ];
+        const observation_models::LinkDefinition& linkDef = linkDefs[ pairIdx ];
+
+        const auto& stationObs = parser_.getObservationsForStationPair( stationPair );
+        const auto& epochs = stationObs.epochs;
+        const auto& tdoa = stationObs.tdoa;
+        const auto& fdoa = stationObs.fdoa;
+
+        // Build observation vectors
+        std::vector< TimeType > observationTimes;
+        std::vector< Eigen::Matrix< ObservationScalarType, Eigen::Dynamic, 1 > > tdoaObservations;
+        std::vector< Eigen::Matrix< ObservationScalarType, Eigen::Dynamic, 1 > > fdoaObservations;
+
+        observationTimes.reserve( epochs.size( ) );
+        tdoaObservations.reserve( epochs.size( ) );
+        fdoaObservations.reserve( epochs.size( ) );
+
+        for( size_t i = 0; i < epochs.size( ); ++i )
+        {
+            observationTimes.push_back( epochs[ i ] );
+
+            Eigen::Matrix< ObservationScalarType, Eigen::Dynamic, 1 > tdoaEntry( 1 );
+            tdoaEntry( 0 ) = tdoa[ i ];
+            tdoaObservations.push_back( tdoaEntry );
+
+            Eigen::Matrix< ObservationScalarType, Eigen::Dynamic, 1 > fdoaEntry( 1 );
+            fdoaEntry( 0 ) = fdoa[ i ];
+            fdoaObservations.push_back( fdoaEntry );
+        }
+
+        // Create observation sets for this station pair
+        auto tdoaSet = std::make_shared< observation_models::SingleObservationSet< ObservationScalarType, TimeType > >(
+            observation_models::differenced_time_of_arrival,
+            linkDef,
+            tdoaObservations,
+            observationTimes,
+            observation_models::receiver );
+        observationSetList.push_back( tdoaSet );
+
+        auto fdoaSet = std::make_shared< observation_models::SingleObservationSet< ObservationScalarType, TimeType > >(
+            observation_models::differenced_frequency_of_arrival,
+            linkDef,
+            fdoaObservations,
+            observationTimes,
+            observation_models::receiver );
+        observationSetList.push_back( fdoaSet );
+    }
+
+    return std::make_shared< observation_models::ObservationCollection< ObservationScalarType, TimeType > >( observationSetList );
+}
+
+template< typename ObservationScalarType, typename TimeType >
+std::shared_ptr< observation_models::ObservationCollection< ObservationScalarType, TimeType > >
+BatchUTAS< ObservationScalarType, TimeType >::toTudat(
+    simulation_setup::SystemOfBodies& bodies,
+    const std::string& stationBodyName,
+    const std::string& targetNameOverride )
+{
+    std::string targetName = targetNameOverride.empty( ) ? getTargetId( ) : targetNameOverride;
+
+    std::cout << "BatchUTAS: Converting to Tudat format" << std::endl;
+    std::cout << "    Target ID (from data): " << getTargetId( ) << std::endl;
+    if( !targetNameOverride.empty( ) )
+    {
+        std::cout << "    Target name (override): " << targetNameOverride << std::endl;
+    }
+
+    // Print station pairs
+    std::vector< StationPair > stationPairs = parser_.getStationPairs( );
+    std::cout << "    Station pairs: " << stationPairs.size( ) << std::endl;
+    for( const auto& pair : stationPairs )
+    {
+        const auto& obs = parser_.getObservationsForStationPair( pair );
+        std::cout << "        " << pair.first << " / " << pair.second
+                  << " (" << obs.epochs.size( ) << " observations)" << std::endl;
+    }
+    std::cout << "    Total observations: " << getNumObservations( ) << std::endl;
+
+    // Step 1: Ensure shape model
+    ensureShapeModel( bodies, stationBodyName );
+
+    // Step 2: Create ground stations
+    createGroundStations( bodies, stationBodyName );
+
+    // Step 3: Create and return observation collection
+    return getObservationCollection( stationBodyName, targetNameOverride );
+}
+
+// ============================================================================
+// Explicit Template Instantiations
+// ============================================================================
+
+template class UTASParser< double, double >;
+template class UTASParser< double, Time >;
+template class BatchUTAS< double, double >;
+template class BatchUTAS< double, Time >;
 
 }  // namespace io
 }  // namespace tudat

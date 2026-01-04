@@ -10,7 +10,6 @@ if (EXISTS "${CMAKE_BINARY_DIR}/CMakeCache.txt")
     file(REMOVE "${CMAKE_BINARY_DIR}/CMakeCache.txt")
 endif ()
 
-
 # Policies
 cmake_policy(SET CMP0069 NEW)  # Missing documentation
 cmake_policy(SET CMP0048 NEW)  # Missing documentation
@@ -21,7 +20,7 @@ list(GET VERSION_LABEL 0 VERSION_LABEL)
 string(
     REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)"
     TUDATPY_VERSION "${VERSION_LABEL}"
-)
+    )
 
 # Project declaration.
 project(tudatpy VERSION "${TUDATPY_VERSION}" LANGUAGES CXX C)
@@ -31,6 +30,7 @@ set(BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Set position independent code [From tudat cmake]
 set(CMAKE_POSITION_INDEPENDENT_CODE True)

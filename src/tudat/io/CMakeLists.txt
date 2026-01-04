@@ -87,6 +87,7 @@ set(io_HEADERS
         "readTrackingTxtFile.h"
         "readVariousPdsFiles.h"
         "unifiedDataLibraryReader.h"
+        "unifiedDataLibraryReaderNew.h"
         "hdf5Manager.h"
         "xdmfGenerator.h"
         )

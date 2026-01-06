@@ -228,7 +228,7 @@ public:
                         std::bind( &linear_algebra::evaluateSecondBlockInStateVector,
                                    receiverNumericalStateDerivativeFunction,
                                    std::placeholders::_1 ),
-                        1,  // One-way Doppler is normalized by c
+                        1,  // One-way Doppler is not normalized by c
                         transmitterProperTimePartials,
                         receiverProperTimePartials,
                         observation_models::one_way_doppler );

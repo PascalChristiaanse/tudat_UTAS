@@ -423,9 +423,9 @@ std::vector< std::string > BatchUTAS< ObservationScalarType, TimeType >::createG
     {
         Eigen::Vector3d tudatPos = parser_.getStationTudatPosition( stationName );
 
-        std::cout << "Creating ground station '" << stationName << "' on '" << stationBodyName << "'" << std::endl;
-        std::cout << "    Position (alt[m], lat[rad], lon[rad]): " << tudatPos( 0 ) << ", "
-                  << tudatPos( 1 ) << ", " << tudatPos( 2 ) << std::endl;
+        // std::cout << "Creating ground station '" << stationName << "' on '" << stationBodyName << "'" << std::endl;
+        // std::cout << "    Position (alt[m], lat[rad], lon[rad]): " << tudatPos( 0 ) << ", " << tudatPos( 1 ) << ", " << tudatPos( 2 )
+        //           << std::endl;
 
         auto settings = std::make_shared< simulation_setup::GroundStationSettings >(
                 stationName, tudatPos, coordinate_conversions::geodetic_position );
@@ -535,23 +535,22 @@ BatchUTAS< ObservationScalarType, TimeType >::toTudat(
 {
     std::string targetName = targetNameOverride.empty( ) ? getTargetId( ) : targetNameOverride;
 
-    std::cout << "BatchUTAS: Converting to Tudat format" << std::endl;
-    std::cout << "    Target ID (from data): " << getTargetId( ) << std::endl;
+    // std::cout << "BatchUTAS: Converting to Tudat format" << std::endl;
+    // std::cout << "    Target ID (from data): " << getTargetId( ) << std::endl;
     if( !targetNameOverride.empty( ) )
     {
-        std::cout << "    Target name (override): " << targetNameOverride << std::endl;
+        // std::cout << "    Target name (override): " << targetNameOverride << std::endl;
     }
 
     // Print station pairs
     std::vector< StationPair > stationPairs = parser_.getStationPairs( );
-    std::cout << "    Station pairs: " << stationPairs.size( ) << std::endl;
+    // std::cout << "    Station pairs: " << stationPairs.size( ) << std::endl;
     for( const auto& pair : stationPairs )
     {
         const auto& obs = parser_.getObservationsForStationPair( pair );
-        std::cout << "        " << pair.first << " / " << pair.second
-                  << " (" << obs.epochs.size( ) << " observations)" << std::endl;
+        // std::cout << "        " << pair.first << " / " << pair.second << " (" << obs.epochs.size( ) << " observations)" << std::endl;
     }
-    std::cout << "    Total observations: " << getNumObservations( ) << std::endl;
+    // std::cout << "    Total observations: " << getNumObservations( ) << std::endl;
 
     // Step 1: Ensure shape model
     ensureShapeModel( bodies, stationBodyName );

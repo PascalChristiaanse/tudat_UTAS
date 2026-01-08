@@ -131,6 +131,71 @@ multiple station pairs across files.
                            R"doc(Uncorrelated track status flag.)doc" );
 
     // =========================================================================
+    // StationPairObservations struct (Time variant)
+    // =========================================================================
+    py::class_< tio::StationPairObservations< double, tudat::Time > >( m,
+                                                                        "StationPairObservations",
+                                                                        R"doc(
+
+Time series data for a single station pair.
+
+Contains observation epochs, TDOA/FDOA measurements, and their uncertainties
+for observations made by a specific pair of ground stations.
+
+Attributes
+----------
+epochs : list[Time]
+    Observation epochs in TDB seconds since J2000.
+tdoa : list[float]
+    Time Difference of Arrival observations in seconds.
+tdoa_uncertainties : list[float]
+    TDOA measurement uncertainties in seconds.
+fdoa : list[float]
+    Frequency Difference of Arrival observations in Hz.
+fdoa_uncertainties : list[float]
+    FDOA measurement uncertainties in Hz.
+
+)doc" )
+            .def_readonly( "epochs", &tio::StationPairObservations< double, tudat::Time >::epochs,
+                           R"doc(Observation epochs in TDB seconds since J2000.)doc" )
+            .def_readonly( "tdoa", &tio::StationPairObservations< double, tudat::Time >::tdoa,
+                           R"doc(TDOA observations in seconds.)doc" )
+            .def_readonly( "tdoa_uncertainties", &tio::StationPairObservations< double, tudat::Time >::tdoaUnc,
+                           R"doc(TDOA uncertainties in seconds.)doc" )
+            .def_readonly( "fdoa", &tio::StationPairObservations< double, tudat::Time >::fdoa,
+                           R"doc(FDOA observations in Hz.)doc" )
+            .def_readonly( "fdoa_uncertainties", &tio::StationPairObservations< double, tudat::Time >::fdoaUnc,
+                           R"doc(FDOA uncertainties in Hz.)doc" )
+            .def( "__len__", &tio::StationPairObservations< double, tudat::Time >::size,
+                  R"doc(Return the number of observations.)doc" );
+
+    // =========================================================================
+    // StationPairObservations struct (double variant)
+    // =========================================================================
+    py::class_< tio::StationPairObservations< double, double > >( m,
+                                                                   "StationPairObservations_double",
+                                                                   R"doc(
+
+Time series data for a single station pair (double precision time).
+
+Contains observation epochs, TDOA/FDOA measurements, and their uncertainties
+for observations made by a specific pair of ground stations.
+
+)doc" )
+            .def_readonly( "epochs", &tio::StationPairObservations< double, double >::epochs,
+                           R"doc(Observation epochs in TDB seconds since J2000.)doc" )
+            .def_readonly( "tdoa", &tio::StationPairObservations< double, double >::tdoa,
+                           R"doc(TDOA observations in seconds.)doc" )
+            .def_readonly( "tdoa_uncertainties", &tio::StationPairObservations< double, double >::tdoaUnc,
+                           R"doc(TDOA uncertainties in seconds.)doc" )
+            .def_readonly( "fdoa", &tio::StationPairObservations< double, double >::fdoa,
+                           R"doc(FDOA observations in Hz.)doc" )
+            .def_readonly( "fdoa_uncertainties", &tio::StationPairObservations< double, double >::fdoaUnc,
+                           R"doc(FDOA uncertainties in Hz.)doc" )
+            .def( "__len__", &tio::StationPairObservations< double, double >::size,
+                  R"doc(Return the number of observations.)doc" );
+
+    // =========================================================================
     // BatchUTAS class (primary user-facing class)
     // =========================================================================
     py::class_< tio::BatchUTAS< double, tudat::Time > >( m,
@@ -344,22 +409,56 @@ UTASMetadata
     Metadata containing all UTAS-specific fields.
 
 )doc" )
-            // Raw observation data access
-            .def_property_readonly( "epochs",
-                                    &tio::BatchUTAS< double, tudat::Time >::getEpochs,
-                                    R"doc(Observation epochs in TDB seconds since J2000.)doc" )
-            .def_property_readonly( "tdoa_observations",
-                                    &tio::BatchUTAS< double, tudat::Time >::getTdoaObservations,
-                                    R"doc(TDOA observations in seconds.)doc" )
-            .def_property_readonly( "tdoa_uncertainties",
-                                    &tio::BatchUTAS< double, tudat::Time >::getTdoaUncertainties,
-                                    R"doc(TDOA uncertainties in seconds.)doc" )
-            .def_property_readonly( "fdoa_observations",
-                                    &tio::BatchUTAS< double, tudat::Time >::getFdoaObservations,
-                                    R"doc(FDOA observations in Hz.)doc" )
-            .def_property_readonly( "fdoa_uncertainties",
-                                    &tio::BatchUTAS< double, tudat::Time >::getFdoaUncertainties,
-                                    R"doc(FDOA uncertainties in Hz.)doc" );
+            // Station-pair based observation access
+            .def( "get_observations_for_station_pair",
+                  &tio::BatchUTAS< double, tudat::Time >::getObservationsForStationPair,
+                  py::arg( "station_pair" ),
+                  py::return_value_policy::reference_internal,
+                  R"doc(
+
+Get observations for a specific station pair.
+
+Parameters
+----------
+station_pair : tuple[str, str]
+    The station pair as (station1_id, station2_id).
+
+Returns
+-------
+StationPairObservations
+    Observations containing epochs, TDOA, FDOA and their uncertainties.
+
+Raises
+------
+RuntimeError
+    If the station pair is not found.
+
+Example
+-------
+>>> obs = batch.get_observations_for_station_pair(("STATION_A", "STATION_B"))
+>>> print(f"Number of observations: {len(obs)}")
+>>> print(f"TDOA values: {obs.tdoa}")
+
+)doc" )
+            .def( "get_all_observations_by_station_pair",
+                  &tio::BatchUTAS< double, tudat::Time >::getAllObservationsByStationPair,
+                  py::return_value_policy::reference_internal,
+                  R"doc(
+
+Get all observations organized by station pair.
+
+Returns
+-------
+dict[tuple[str, str], StationPairObservations]
+    Dictionary mapping station pairs to their observation data.
+
+Example
+-------
+>>> all_obs = batch.get_all_observations_by_station_pair()
+>>> for station_pair, obs in all_obs.items():
+...     print(f"{station_pair}: {len(obs)} observations")
+
+)doc" );
 
     // =========================================================================
     // BatchUTAS with double TimeType (for compatibility)
@@ -405,11 +504,13 @@ need double precision time representation.
             .def_property_readonly( "num_station_pairs", &tio::BatchUTAS< double, double >::getNumStationPairs )
             .def( "get_metadata", &tio::BatchUTAS< double, double >::getMetadata,
                   py::return_value_policy::reference_internal )
-            .def_property_readonly( "epochs", &tio::BatchUTAS< double, double >::getEpochs )
-            .def_property_readonly( "tdoa_observations", &tio::BatchUTAS< double, double >::getTdoaObservations )
-            .def_property_readonly( "tdoa_uncertainties", &tio::BatchUTAS< double, double >::getTdoaUncertainties )
-            .def_property_readonly( "fdoa_observations", &tio::BatchUTAS< double, double >::getFdoaObservations )
-            .def_property_readonly( "fdoa_uncertainties", &tio::BatchUTAS< double, double >::getFdoaUncertainties );
+            .def( "get_observations_for_station_pair",
+                  &tio::BatchUTAS< double, double >::getObservationsForStationPair,
+                  py::arg( "station_pair" ),
+                  py::return_value_policy::reference_internal )
+            .def( "get_all_observations_by_station_pair",
+                  &tio::BatchUTAS< double, double >::getAllObservationsByStationPair,
+                  py::return_value_policy::reference_internal );
 }
 
 }  // namespace unified_data_library

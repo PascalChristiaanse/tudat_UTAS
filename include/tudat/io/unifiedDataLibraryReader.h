@@ -158,12 +158,6 @@ public:
     virtual void parseFiles( ) = 0;
 
     /**
-     * @brief Get observation epochs in TDB seconds since J2000
-     */
-    virtual const std::vector< TimeType >& getEpochs( ) const = 0;
-
-
-    /**
      * @brief Get number of observations
      */
     virtual size_t getNumObservations( ) const = 0;
@@ -227,13 +221,10 @@ public:
 
     void parseFiles( ) override;
 
-    // Legacy single-vector interface (concatenates all station pairs)
-    const std::vector< TimeType >& getEpochs( ) const override { return allEpochs_; }
-    const std::vector< ObservationScalarType >& getTdoaObservations( ) const { return allTdoa_; }
-    const std::vector< ObservationScalarType >& getTdoaUncertainties( ) const { return allTdoaUnc_; }
-    const std::vector< ObservationScalarType >& getFdoaObservations( ) const { return allFdoa_; }
-    const std::vector< ObservationScalarType >& getFdoaUncertainties( ) const { return allFdoaUnc_; }
-    size_t getNumObservations( ) const override { return allEpochs_.size( ); }
+    /**
+     * @brief Get number of observations across all station pairs
+     */
+    size_t getNumObservations( ) const override;
 
     /**
      * @brief Get parsed metadata
@@ -276,7 +267,6 @@ private:
     void parseFile( const std::string& filePath );
     void parseObservationArray( const nlohmann::json& observations, const std::string& filePath );
     void validateSingleTarget( const std::string& newTargetId, const std::string& filePath );
-    void rebuildConcatenatedVectors( );
     TimeType convertIsoStringToEpoch( const std::string& isoTime );
 
     template< typename T >
@@ -295,13 +285,6 @@ private:
 
     // Station positions (accumulated from all files)
     std::map< std::string, GeodeticPositionNew > stationPositions_;
-
-    // Concatenated vectors for legacy interface
-    std::vector< TimeType > allEpochs_;
-    std::vector< ObservationScalarType > allTdoa_;
-    std::vector< ObservationScalarType > allTdoaUnc_;
-    std::vector< ObservationScalarType > allFdoa_;
-    std::vector< ObservationScalarType > allFdoaUnc_;
 
     std::set< std::string > foundTargets_;  // Track all targets found for error messages
 };
@@ -493,29 +476,28 @@ public:
     size_t getNumStationPairs( ) const { return parser_.getStationPairs( ).size( ); }
 
     /**
-     * @brief Get observation epochs (TDB seconds since J2000) - all station pairs concatenated
+     * @brief Get observations for a specific station pair
+     *
+     * @param stationPair The station pair (station1_id, station2_id)
+     * @return Reference to StationPairObservations containing epochs, TDOA, FDOA and uncertainties
+     * @throws std::runtime_error if station pair not found
      */
-    const std::vector< TimeType >& getEpochs( ) const { return parser_.getEpochs( ); }
+    const StationPairObservations< ObservationScalarType, TimeType >&
+    getObservationsForStationPair( const StationPair& stationPair ) const
+    {
+        return parser_.getObservationsForStationPair( stationPair );
+    }
 
     /**
-     * @brief Get TDOA observations (seconds) - all station pairs concatenated
+     * @brief Get all observations organized by station pair
+     *
+     * @return Map from station pair to observations
      */
-    const std::vector< ObservationScalarType >& getTdoaObservations( ) const { return parser_.getTdoaObservations( ); }
-
-    /**
-     * @brief Get TDOA uncertainties (seconds) - all station pairs concatenated
-     */
-    const std::vector< ObservationScalarType >& getTdoaUncertainties( ) const { return parser_.getTdoaUncertainties( ); }
-
-    /**
-     * @brief Get FDOA observations (Hz) - all station pairs concatenated
-     */
-    const std::vector< ObservationScalarType >& getFdoaObservations( ) const { return parser_.getFdoaObservations( ); }
-
-    /**
-     * @brief Get FDOA uncertainties (Hz) - all station pairs concatenated
-     */
-    const std::vector< ObservationScalarType >& getFdoaUncertainties( ) const { return parser_.getFdoaUncertainties( ); }
+    const std::map< StationPair, StationPairObservations< ObservationScalarType, TimeType > >&
+    getAllObservationsByStationPair( ) const
+    {
+        return parser_.getAllObservationsByStationPair( );
+    }
 
 private:
     UTASParser< ObservationScalarType, TimeType > parser_;

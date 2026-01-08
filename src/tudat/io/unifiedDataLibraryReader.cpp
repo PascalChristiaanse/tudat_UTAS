@@ -115,29 +115,17 @@ void UTASParser< ObservationScalarType, TimeType >::parseFiles( )
     {
         throw std::runtime_error( "UTASParser: No observations found in provided files" );
     }
-
-    // Build concatenated vectors for legacy interface
-    rebuildConcatenatedVectors( );
 }
 
 template< typename ObservationScalarType, typename TimeType >
-void UTASParser< ObservationScalarType, TimeType >::rebuildConcatenatedVectors( )
+size_t UTASParser< ObservationScalarType, TimeType >::getNumObservations( ) const
 {
-    allEpochs_.clear( );
-    allTdoa_.clear( );
-    allTdoaUnc_.clear( );
-    allFdoa_.clear( );
-    allFdoaUnc_.clear( );
-
+    size_t total = 0;
     for( const auto& entry : observationsByStationPair_ )
     {
-        const auto& obs = entry.second;
-        allEpochs_.insert( allEpochs_.end( ), obs.epochs.begin( ), obs.epochs.end( ) );
-        allTdoa_.insert( allTdoa_.end( ), obs.tdoa.begin( ), obs.tdoa.end( ) );
-        allTdoaUnc_.insert( allTdoaUnc_.end( ), obs.tdoaUnc.begin( ), obs.tdoaUnc.end( ) );
-        allFdoa_.insert( allFdoa_.end( ), obs.fdoa.begin( ), obs.fdoa.end( ) );
-        allFdoaUnc_.insert( allFdoaUnc_.end( ), obs.fdoaUnc.begin( ), obs.fdoaUnc.end( ) );
+        total += entry.second.size( );
     }
+    return total;
 }
 
 template< typename ObservationScalarType, typename TimeType >
@@ -440,7 +428,7 @@ std::vector< std::string > BatchUTAS< ObservationScalarType, TimeType >::createG
                   << tudatPos( 1 ) << ", " << tudatPos( 2 ) << std::endl;
 
         auto settings = std::make_shared< simulation_setup::GroundStationSettings >(
-            stationName, tudatPos, coordinate_conversions::geodetic_position );
+                stationName, tudatPos, coordinate_conversions::geodetic_position );
         simulation_setup::createGroundStation( body, settings );
         stationNames.push_back( stationName );
     }
@@ -500,7 +488,6 @@ BatchUTAS< ObservationScalarType, TimeType >::getObservationCollection(
         std::vector< TimeType > observationTimes;
         std::vector< Eigen::Matrix< ObservationScalarType, Eigen::Dynamic, 1 > > tdoaObservations;
         std::vector< Eigen::Matrix< ObservationScalarType, Eigen::Dynamic, 1 > > fdoaObservations;
-
         observationTimes.reserve( epochs.size( ) );
         tdoaObservations.reserve( epochs.size( ) );
         fdoaObservations.reserve( epochs.size( ) );

@@ -519,11 +519,13 @@ BatchUTAS< ObservationScalarType, TimeType >::getObservationCollection( const st
             Eigen::Matrix< ObservationScalarType, Eigen::Dynamic, 1 > tdoaUncEntry( 1 );
             // tdoaUncEntry( 0 ) = 1 / ( tdoaUnc[ i ] * tdoaUnc[ i ] ); // Inverse variance weighting. This is acting up with current data,
             // not sure why
-            tdoaUncertainties.push_back( 1.0 );
+            tdoaUncEntry( 0 ) = 1.0;
+            tdoaUncertainties.push_back( tdoaUncEntry );
             Eigen::Matrix< ObservationScalarType, Eigen::Dynamic, 1 > fdoaUncEntry( 1 );
             // fdoaUncEntry( 0 ) = 1 / ( fdoaUnc[ i ] * fdoaUnc[ i ] ); // Inverse variance weighting. This is acting up with current data,
             // not sure why
-            fdoaUncertainties.push_back( 1.0 );
+            fdoaUncEntry( 0 ) = 1.0;
+            fdoaUncertainties.push_back( fdoaUncEntry );
         }
 
         // Create observation sets for this station pair

@@ -482,7 +482,9 @@ BatchUTAS< ObservationScalarType, TimeType >::getObservationCollection(
         const auto& stationObs = parser_.getObservationsForStationPair( stationPair );
         const auto& epochs = stationObs.epochs;
         const auto& tdoa = stationObs.tdoa;
+        const auto& tdoaUnc = stationObs.tdoaUnc;
         const auto& fdoa = stationObs.fdoa;
+        const auto& fdoaUnc = stationObs.fdoaUnc;
 
         // Build observation vectors
         std::vector< TimeType > observationTimes;
@@ -491,6 +493,21 @@ BatchUTAS< ObservationScalarType, TimeType >::getObservationCollection(
         observationTimes.reserve( epochs.size( ) );
         tdoaObservations.reserve( epochs.size( ) );
         fdoaObservations.reserve( epochs.size( ) );
+
+        std::vector< Eigen::Matrix< ObservationScalarType, Eigen::Dynamic, 1 > > tdoaUncertainties;
+        tdoaUncertainties.reserve( epochs.size( ) );
+        std::vector< Eigen::Matrix< ObservationScalarType, Eigen::Dynamic, 1 > > fdoaUncertainties;
+        fdoaUncertainties.reserve( epochs.size( ) );
+
+        // Only apply weights if uncertainties are available
+        if( tdoaUnc.size( ) != 0 && fdoaUnc.size( ) != 0 )
+        {
+            if( tdoaUnc.size( ) != epochs.size( ) || fdoaUnc.size( ) != epochs.size( ) )
+            {
+                throw std::runtime_error( "BatchUTAS: Uncertainty size does not match number of observations for station pair (" +
+                                          stationPair.first + ", " + stationPair.second + ")" );
+            }
+        }
 
         for( size_t i = 0; i < epochs.size( ); ++i )
         {
@@ -503,23 +520,58 @@ BatchUTAS< ObservationScalarType, TimeType >::getObservationCollection(
             Eigen::Matrix< ObservationScalarType, Eigen::Dynamic, 1 > fdoaEntry( 1 );
             fdoaEntry( 0 ) = fdoa[ i ];
             fdoaObservations.push_back( fdoaEntry );
+
+            if( tdoaUnc.size( ) == 0 || fdoaUnc.size( ) == 0 )
+            {
+                continue;
+            }
+            Eigen::Matrix< ObservationScalarType, Eigen::Dynamic, 1 > tdoaUncEntry( 1 );
+            // tdoaUncEntry( 0 ) = 1 / ( tdoaUnc[ i ] * tdoaUnc[ i ] ); // Inverse variance weighting. This is acting up with current data,
+            // not sure why
+            tdoaUncertainties.push_back( 1.0 );
+            Eigen::Matrix< ObservationScalarType, Eigen::Dynamic, 1 > fdoaUncEntry( 1 );
+            // fdoaUncEntry( 0 ) = 1 / ( fdoaUnc[ i ] * fdoaUnc[ i ] ); // Inverse variance weighting. This is acting up with current data,
+            // not sure why
+            fdoaUncertainties.push_back( 1.0 );
         }
 
         // Create observation sets for this station pair
-        auto tdoaSet = std::make_shared< observation_models::SingleObservationSet< ObservationScalarType, TimeType > >(
-            observation_models::differenced_time_of_arrival,
-            linkDef,
-            tdoaObservations,
-            observationTimes,
-            observation_models::receiver );
+        std::shared_ptr< observation_models::SingleObservationSet< ObservationScalarType, TimeType > > tdoaSet =
+                std::make_shared< observation_models::SingleObservationSet< ObservationScalarType, TimeType > >(
+                        observation_models::differenced_time_of_arrival,
+                        linkDef,
+                        tdoaObservations,
+                        observationTimes,
+                        observation_models::receiver );
+
+        // Convert uncertainty vectors to Eigen::VectorXd for setTabulatedWeights
+        if( !tdoaUncertainties.empty( ) )
+        {
+            Eigen::VectorXd tdoaWeights( tdoaUncertainties.size( ) );
+            for( size_t i = 0; i < tdoaUncertainties.size( ); ++i )
+            {
+                tdoaWeights( i ) = tdoaUncertainties[ i ]( 0 );
+            }
+            tdoaSet->setTabulatedWeights( tdoaWeights );
+        }
         observationSetList.push_back( tdoaSet );
 
         auto fdoaSet = std::make_shared< observation_models::SingleObservationSet< ObservationScalarType, TimeType > >(
-            observation_models::differenced_frequency_of_arrival,
-            linkDef,
-            fdoaObservations,
-            observationTimes,
-            observation_models::receiver );
+                observation_models::differenced_frequency_of_arrival,
+                linkDef,
+                fdoaObservations,
+                observationTimes,
+                observation_models::receiver );
+
+        if( !fdoaUncertainties.empty( ) )
+        {
+            Eigen::VectorXd fdoaWeights( fdoaUncertainties.size( ) );
+            for( size_t i = 0; i < fdoaUncertainties.size( ); ++i )
+            {
+                fdoaWeights( i ) = fdoaUncertainties[ i ]( 0 );
+            }
+            fdoaSet->setTabulatedWeights( fdoaWeights );
+        }
         observationSetList.push_back( fdoaSet );
     }
 

@@ -307,10 +307,7 @@ TimeType UTASParser< ObservationScalarType, TimeType >::convertIsoStringToEpoch(
         auto timeConverter = std::make_shared< earth_orientation::TerrestrialTimeScaleConverter >( );
         Eigen::Vector3d dummyPosition( 6378.0e3, 0.0, 0.0 );
         double timeInTDB = timeConverter->getCurrentTime< double >(
-            basic_astrodynamics::TimeScales::utc_scale,
-            basic_astrodynamics::TimeScales::tdb_scale,
-            timeInUTC,
-            dummyPosition );
+                basic_astrodynamics::TimeScales::utc_scale, basic_astrodynamics::TimeScales::tdb_scale, timeInUTC, dummyPosition );
 
         return static_cast< TimeType >( timeInTDB );
     }
@@ -370,15 +367,12 @@ UTASParser< ObservationScalarType, TimeType >::getObservationsForStationPair( co
 // ============================================================================
 
 template< typename ObservationScalarType, typename TimeType >
-BatchUTAS< ObservationScalarType, TimeType >::BatchUTAS( const std::vector< std::string >& filePaths ):
-    parser_( filePaths )
-{
-}
+BatchUTAS< ObservationScalarType, TimeType >::BatchUTAS( const std::vector< std::string >& filePaths ): parser_( filePaths )
+{}
 
 template< typename ObservationScalarType, typename TimeType >
-void BatchUTAS< ObservationScalarType, TimeType >::ensureShapeModel(
-    simulation_setup::SystemOfBodies& bodies,
-    const std::string& stationBodyName ) const
+void BatchUTAS< ObservationScalarType, TimeType >::ensureShapeModel( simulation_setup::SystemOfBodies& bodies,
+                                                                     const std::string& stationBodyName ) const
 {
     // Ensure body exists
     try
@@ -395,13 +389,12 @@ void BatchUTAS< ObservationScalarType, TimeType >::ensureShapeModel(
     // If no shape model, create oblate spheroid from SPICE
     if( body->getShapeModel( ) == nullptr )
     {
-        auto shapeModel = simulation_setup::createBodyShapeModel(
-            simulation_setup::fromSpiceOblateSphericalBodyShapeSettings( ), stationBodyName );
+        auto shapeModel =
+                simulation_setup::createBodyShapeModel( simulation_setup::fromSpiceOblateSphericalBodyShapeSettings( ), stationBodyName );
         body->setShapeModel( shapeModel );
     }
     // If shape model exists but is not oblate spheroid, throw error
-    else if( std::dynamic_pointer_cast< basic_astrodynamics::OblateSpheroidBodyShapeModel >(
-                 body->getShapeModel( ) ) == nullptr )
+    else if( std::dynamic_pointer_cast< basic_astrodynamics::OblateSpheroidBodyShapeModel >( body->getShapeModel( ) ) == nullptr )
     {
         throw std::runtime_error( "BatchUTAS: Station body '" + stationBodyName +
                                   "' has incompatible shape model. Must use OblateSpheroidBodyShapeModel for ground stations." );
@@ -409,9 +402,8 @@ void BatchUTAS< ObservationScalarType, TimeType >::ensureShapeModel(
 }
 
 template< typename ObservationScalarType, typename TimeType >
-std::vector< std::string > BatchUTAS< ObservationScalarType, TimeType >::createGroundStations(
-    simulation_setup::SystemOfBodies& bodies,
-    const std::string& stationBodyName ) const
+std::vector< std::string > BatchUTAS< ObservationScalarType, TimeType >::createGroundStations( simulation_setup::SystemOfBodies& bodies,
+                                                                                               const std::string& stationBodyName ) const
 {
     std::vector< std::string > stationNames;
     auto body = bodies.getBody( stationBodyName );
@@ -438,8 +430,8 @@ std::vector< std::string > BatchUTAS< ObservationScalarType, TimeType >::createG
 
 template< typename ObservationScalarType, typename TimeType >
 std::vector< observation_models::LinkDefinition > BatchUTAS< ObservationScalarType, TimeType >::getLinkDefinitions(
-    const std::string& stationBodyName,
-    const std::string& targetNameOverride ) const
+        const std::string& stationBodyName,
+        const std::string& targetNameOverride ) const
 {
     const UTASMetadata& meta = parser_.getMetadata( );
 
@@ -464,9 +456,8 @@ std::vector< observation_models::LinkDefinition > BatchUTAS< ObservationScalarTy
 
 template< typename ObservationScalarType, typename TimeType >
 std::shared_ptr< observation_models::ObservationCollection< ObservationScalarType, TimeType > >
-BatchUTAS< ObservationScalarType, TimeType >::getObservationCollection(
-    const std::string& stationBodyName,
-    const std::string& targetNameOverride ) const
+BatchUTAS< ObservationScalarType, TimeType >::getObservationCollection( const std::string& stationBodyName,
+                                                                        const std::string& targetNameOverride ) const
 {
     std::vector< observation_models::LinkDefinition > linkDefs = getLinkDefinitions( stationBodyName, targetNameOverride );
     std::vector< StationPair > stationPairs = parser_.getStationPairs( );
@@ -580,10 +571,9 @@ BatchUTAS< ObservationScalarType, TimeType >::getObservationCollection(
 
 template< typename ObservationScalarType, typename TimeType >
 std::shared_ptr< observation_models::ObservationCollection< ObservationScalarType, TimeType > >
-BatchUTAS< ObservationScalarType, TimeType >::toTudat(
-    simulation_setup::SystemOfBodies& bodies,
-    const std::string& stationBodyName,
-    const std::string& targetNameOverride )
+BatchUTAS< ObservationScalarType, TimeType >::toTudat( simulation_setup::SystemOfBodies& bodies,
+                                                       const std::string& stationBodyName,
+                                                       const std::string& targetNameOverride )
 {
     std::string targetName = targetNameOverride.empty( ) ? getTargetId( ) : targetNameOverride;
 

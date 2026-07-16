@@ -13,8 +13,14 @@
 
 #include <memory>
 
+#include <cereal/access.hpp>
+#include <cereal/types/base_class.hpp>
+#include <cereal/types/polymorphic.hpp>
+#include <cereal/types/vector.hpp>
+
 #include "tudat/simulation/propagation_setup/propagationOutput.h"
 #include "tudat/simulation/propagation_setup/propagationSettings.h"
+#include "tudat/io/serialization/base.h"
 
 namespace tudat
 {
@@ -678,6 +684,15 @@ public:
         return baseString;
     }
 
+    bool operator==( const PropagationTerminationDetails& rhs ) const
+    {
+        return equals( rhs );
+    }
+    bool operator!=( const PropagationTerminationDetails& rhs ) const
+    {
+        return !equals( rhs );
+    }
+
 protected:
     //! Reason for termination
     PropagationTerminationReason propagationTerminationReason_;
@@ -688,6 +703,36 @@ protected:
      *  false if not, -1 if neither is relevant.
      */
     bool terminationOnExactCondition_;
+
+    //! Protected default constructor for deserialization (also accessible by derived classes)
+    PropagationTerminationDetails( ): propagationTerminationReason_( propagation_never_run ), terminationOnExactCondition_( false ) {}
+
+    virtual bool equals( const PropagationTerminationDetails& rhs ) const
+    {
+        return ( propagationTerminationReason_ == rhs.propagationTerminationReason_ ) &&
+                ( terminationOnExactCondition_ == rhs.terminationOnExactCondition_ );
+    }
+
+public:
+    //! Save termination details to a binary file
+    TUDAT_DEFINE_FILE_IO_POLYMORPHIC( PropagationTerminationDetails )
+
+private:
+    friend class cereal::access;
+
+    template< class Archive >
+    void save( Archive& ar ) const
+    {
+        ar( CEREAL_NVP( propagationTerminationReason_ ) );
+        ar( CEREAL_NVP( terminationOnExactCondition_ ) );
+    }
+
+    template< class Archive >
+    void load( Archive& ar )
+    {
+        ar( CEREAL_NVP( propagationTerminationReason_ ) );
+        ar( CEREAL_NVP( terminationOnExactCondition_ ) );
+    }
 };
 
 //! Class for storing details on the propagation termination when using hybrid termination conditions
@@ -726,9 +771,44 @@ public:
         return isConditionMetWhenStopping_;
     }
 
+protected:
+    bool equals( const PropagationTerminationDetails& rhs ) const override
+    {
+        if( !PropagationTerminationDetails::equals( rhs ) )
+        {
+            return false;
+        }
+
+        const auto* rhsCast = dynamic_cast< const PropagationTerminationDetailsFromHybridCondition* >( &rhs );
+        if( rhsCast == nullptr )
+        {
+            return false;
+        }
+
+        return ( isConditionMetWhenStopping_ == rhsCast->isConditionMetWhenStopping_ );
+    }
+
 private:
     //! List of booleans, denoting for each of the constituent stopping conditions whether or not is was met.
     std::vector< bool > isConditionMetWhenStopping_;
+
+    friend class cereal::access;
+
+    PropagationTerminationDetailsFromHybridCondition( ): PropagationTerminationDetails( ) {}
+
+    template< class Archive >
+    void save( Archive& ar ) const
+    {
+        ar( cereal::base_class< PropagationTerminationDetails >( this ) );
+        ar( CEREAL_NVP( isConditionMetWhenStopping_ ) );
+    }
+
+    template< class Archive >
+    void load( Archive& ar )
+    {
+        ar( cereal::base_class< PropagationTerminationDetails >( this ) );
+        ar( CEREAL_NVP( isConditionMetWhenStopping_ ) );
+    }
 };
 
 }  // namespace propagators

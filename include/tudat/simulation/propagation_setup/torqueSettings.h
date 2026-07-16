@@ -1,5 +1,5 @@
 /*    Copyright (c) 2010-2019, Delft University of Technology
- *    All rigths reserved
+ *    All rights reserved
  *
  *    This file is part of the Tudat. Redistribution and use in source and
  *    binary forms, with or without modification, are permitted exclusively
@@ -10,6 +10,12 @@
 
 #ifndef TUDAT_TORQUESETTINGS_H
 #define TUDAT_TORQUESETTINGS_H
+
+#include <cereal/access.hpp>
+#include <cereal/types/base_class.hpp>
+#include <cereal/types/polymorphic.hpp>
+
+#include "tudat/io/serialization/base.h"
 
 #include "tudat/astro/basic_astro/torqueModelTypes.h"
 #include "tudat/simulation/propagation_setup/accelerationSettings.h"
@@ -48,6 +54,46 @@ public:
 
     // Type of torque that is to be created.
     basic_astrodynamics::AvailableTorque torqueType_;
+
+    // Used for serialization testing
+    bool operator==( const TorqueSettings& rhs ) const
+    {
+        return equals( rhs );
+    }
+
+    bool operator!=( const TorqueSettings& rhs ) const
+    {
+        return !equals( rhs );
+    }
+
+    //! Save torque settings to a JSON file
+    TUDAT_DEFINE_FILE_IO_POLYMORPHIC( TorqueSettings )
+
+protected:
+    // Default constructor for serialization
+    TorqueSettings( ): torqueType_( basic_astrodynamics::underfined_torque ) {}
+
+    // Each derived class should implement this function such that it returns true if a deserialized object is
+    // equal to the original object.
+    virtual bool equals( const TorqueSettings& rhs ) const
+    {
+        return torqueType_ == rhs.torqueType_;
+    }
+
+private:
+    friend class cereal::access;
+
+    template< class Archive >
+    void save( Archive& ar ) const
+    {
+        ar( CEREAL_NVP( torqueType_ ) );
+    }
+
+    template< class Archive >
+    void load( Archive& ar )
+    {
+        ar( CEREAL_NVP( torqueType_ ) );
+    }
 };
 
 // Class to define settings for a spherical harmonic gravitational torque exerted by a point mass.
@@ -71,6 +117,37 @@ public:
 
     // Maximum order to which gravity field of body undergoing torque is to be exerted
     int maximumOrder_;
+
+protected:
+    // Default constructor for serialization
+    SphericalHarmonicTorqueSettings( ): maximumDegree_( 0 ), maximumOrder_( 0 ) {}
+
+    bool equals( const TorqueSettings& rhs ) const override
+    {
+        const auto* derived = dynamic_cast< const SphericalHarmonicTorqueSettings* >( &rhs );
+        if( !derived ) return false;
+        if( !TorqueSettings::equals( rhs ) ) return false;
+        return maximumDegree_ == derived->maximumDegree_ && maximumOrder_ == derived->maximumOrder_;
+    }
+
+private:
+    friend class cereal::access;
+
+    template< class Archive >
+    void save( Archive& ar ) const
+    {
+        ar( cereal::base_class< TorqueSettings >( this ) );
+        ar( CEREAL_NVP( maximumDegree_ ) );
+        ar( CEREAL_NVP( maximumOrder_ ) );
+    }
+
+    template< class Archive >
+    void load( Archive& ar )
+    {
+        ar( cereal::base_class< TorqueSettings >( this ) );
+        ar( CEREAL_NVP( maximumDegree_ ) );
+        ar( CEREAL_NVP( maximumOrder_ ) );
+    }
 };
 
 class FullTwoBodySphericalHarmonicTorqueSettings : public TorqueSettings
@@ -115,6 +192,38 @@ public:
     {}
 
     std::function< Eigen::Vector3d( const double ) > torqueFunction_;
+
+protected:
+    // Default constructor for serialization
+    CustomTorqueSettings( ): torqueFunction_( nullptr ) {}
+
+    bool equals( const TorqueSettings& rhs ) const override
+    {
+        const auto* derived = dynamic_cast< const CustomTorqueSettings* >( &rhs );
+        if( !derived ) return false;
+        if( !TorqueSettings::equals( rhs ) ) return false;
+        // std::function cannot be compared; always return false for custom torque
+        return false;
+    }
+
+private:
+    friend class cereal::access;
+
+    template< class Archive >
+    void save( Archive& ar ) const
+    {
+        static_cast< void >( ar );
+        throw std::runtime_error(
+                "CustomTorqueSettings cannot be serialized: std::function member 'torqueFunction_' is not serializable." );
+    }
+
+    template< class Archive >
+    void load( Archive& ar )
+    {
+        static_cast< void >( ar );
+        throw std::runtime_error(
+                "CustomTorqueSettings cannot be serialized: std::function member 'torqueFunction_' is not serializable." );
+    }
 };
 
 //! @get_docstring(aerodynamicTorque)

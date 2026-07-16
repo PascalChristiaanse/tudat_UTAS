@@ -17,9 +17,20 @@
 #include <memory>
 #include <Eigen/Core>
 
+#include <cereal/cereal.hpp>
+#include <cereal/access.hpp>
+#include <cereal/types/base_class.hpp>
+#include <cereal/types/map.hpp>
+#include <cereal/types/memory.hpp>
+#include <cereal/types/polymorphic.hpp>
+#include <cereal/types/string.hpp>
+#include <cereal/types/utility.hpp>
+#include <cereal/types/vector.hpp>
+
 #include "tudat/math/interpolators/oneDimensionalInterpolator.h"
 #include "tudat/simulation/propagation_setup/propagationOutputSettings.h"
 #include "tudat/simulation/propagation_setup/propagationOutput.h"
+#include "tudat/io/serialization/base.h"
 
 namespace tudat
 {
@@ -58,7 +69,39 @@ public:
             const std::shared_ptr< SingleDependentVariableSaveSettings > dependentVariableSettings,
             const TimeType evaluationTime ) = 0;
 
+    bool operator==( const DependentVariablesInterface& rhs ) const
+    {
+        return equals( rhs );
+    }
+
+    bool operator!=( const DependentVariablesInterface& rhs ) const
+    {
+        return !equals( rhs );
+    }
+
 protected:
+    virtual bool equals( const DependentVariablesInterface& rhs ) const
+    {
+        return true;
+    }
+
+private:
+    friend class cereal::access;
+
+    template< class Archive >
+    void save( Archive& ar ) const
+    {
+        // Base class has no data members to serialize
+    }
+
+    template< class Archive >
+    void load( Archive& ar )
+    {
+        // Base class has no data members to serialize
+    }
+
+public:
+    TUDAT_DEFINE_FILE_IO_POLYMORPHIC( DependentVariablesInterface< TimeType > )
 };
 
 //! Interface object of interpolation of numerically propagated dependent variables for single-arc propagation/estimation.
@@ -66,6 +109,11 @@ template< typename TimeType = double >
 class SingleArcDependentVariablesInterface : public DependentVariablesInterface< TimeType >
 {
 public:
+    using BaseType = ::tudat::propagators::DependentVariablesInterface< TimeType >;
+
+    //! Default constructor (for serialization only)
+    SingleArcDependentVariablesInterface( ) = default;
+
     //! Constructor
     /*!
      * Constructor
@@ -231,6 +279,37 @@ public:
         return dependentVariablesIdsAndIndices_;
     }
 
+protected:
+    bool equals( const BaseType& rhs ) const override
+    {
+        const SingleArcDependentVariablesInterface< TimeType >* rhsSingleArc =
+                dynamic_cast< const SingleArcDependentVariablesInterface< TimeType >* >( &rhs );
+        if( rhsSingleArc == nullptr )
+        {
+            return false;
+        }
+
+        if( dependentVariablesSettings_.size( ) != rhsSingleArc->dependentVariablesSettings_.size( ) )
+        {
+            return false;
+        }
+
+        for( unsigned int i = 0; i < dependentVariablesSettings_.size( ); i++ )
+        {
+            if( dependentVariablesSettings_.at( i )->dependentVariableType_ !=
+                        rhsSingleArc->dependentVariablesSettings_.at( i )->dependentVariableType_ ||
+                dependentVariablesSettings_.at( i )->associatedBody_ !=
+                        rhsSingleArc->dependentVariablesSettings_.at( i )->associatedBody_ ||
+                dependentVariablesSettings_.at( i )->secondaryBody_ != rhsSingleArc->dependentVariablesSettings_.at( i )->secondaryBody_ ||
+                dependentVariablesSettings_.at( i )->componentIndex_ != rhsSingleArc->dependentVariablesSettings_.at( i )->componentIndex_ )
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
 private:
     //! Vector of single dependent variable settings objects
     std::vector< std::shared_ptr< SingleDependentVariableSaveSettings > > dependentVariablesSettings_;
@@ -249,12 +328,45 @@ private:
     std::vector< PropagationDependentVariables > dependentVariablesTypes_;
 
     //! Size of dependent variable vector
-    int dependentVariablesSize_;
+    int dependentVariablesSize_ = 0;
 
     //! Map containing the dependent variables Ids and indices
     std::map< std::string, int > dependentVariablesIdsAndIndices_;
 
     std::map< std::string, int > dependentVariablesIdsAndSize_;
+
+    // --- Cereal serialization support ---
+    friend class cereal::access;
+
+    template< class Archive >
+    void save( Archive& ar ) const
+    {
+        ar( cereal::base_class< DependentVariablesInterface< TimeType > >( this ) );
+        ar( CEREAL_NVP( dependentVariablesSettings_ ) );
+        ar( CEREAL_NVP( dependentVariableIds_ ) );
+        ar( CEREAL_NVP( orderedDependentVariableSettings_ ) );
+        // Skip: dependentVariablesInterpolator_ (runtime interpolator, reconstructable from history)
+        // Skip: dependentVariables_ (pre-allocated vector, recomputed on use)
+        // Skip: dependentVariablesTypes_ (recomputed from dependentVariablesSettings_)
+        // Skip: dependentVariablesSize_ (recomputed from dependentVariablesSettings_)
+        // Skip: dependentVariablesIdsAndIndices_ (recomputed from dependentVariablesSettings_)
+        // Skip: dependentVariablesIdsAndSize_ (recomputed from dependentVariablesSettings_)
+    }
+
+    template< class Archive >
+    void load( Archive& ar )
+    {
+        ar( cereal::base_class< DependentVariablesInterface< TimeType > >( this ) );
+        ar( CEREAL_NVP( dependentVariablesSettings_ ) );
+        ar( CEREAL_NVP( dependentVariableIds_ ) );
+        ar( CEREAL_NVP( orderedDependentVariableSettings_ ) );
+        // All skipped members are derived data — they remain at their default-constructed values
+        // and should be re-initialized by the caller if needed.
+    }
+
+public:
+    //! Save single-arc dependent variables interface to a binary file
+    TUDAT_DEFINE_BINARY_IO_POLYMORPHIC( SingleArcDependentVariablesInterface< TimeType > )
 };
 
 //! Interface object of interpolation of numerically propagated dependent variables for multi-arc
@@ -268,6 +380,15 @@ public:
      * Constructor
      * \param dependentVariablesInterpolators Vector of interpolators returning the dependent variables values as a function of time.
      * \param dependentVariablesSettings Vector of single dependent variables settings.
+     * \param arcStartTimes Times at which the multiple arcs start
+     * \param arcEndTimes Times at which the multiple arcs end
+     */
+    //! Default constructor (for serialization only)
+    MultiArcDependentVariablesInterface( ) = default;
+
+    /*!
+     * Constructor
+     * \param singleArcInterfaces Vector of single-arc dependent variable interfaces.
      * \param arcStartTimes Times at which the multiple arcs start
      * \param arcEndTimes Times at which the multiple arcs end
      */
@@ -416,10 +537,56 @@ private:
     std::vector< double > arcEndTimes_;
 
     //! Number of arcs.
-    int numberArcs_;
+    int numberArcs_ = 0;
 
     //! Look-up algorithm to determine the arc of a given time.
     std::shared_ptr< interpolators::HuntingAlgorithmLookupScheme< double > > lookUpscheme_;
+
+    // --- Cereal serialization support ---
+    friend class cereal::access;
+
+    bool equals( const DependentVariablesInterface< TimeType >& rhs ) const override
+    {
+        const auto* rhsDerived = dynamic_cast< const MultiArcDependentVariablesInterface* >( &rhs );
+        if( !rhsDerived ) return false;
+        if( singleArcInterfaces_.size( ) != rhsDerived->singleArcInterfaces_.size( ) ) return false;
+        for( std::size_t i = 0; i < singleArcInterfaces_.size( ); ++i )
+        {
+            const auto& lhsPtr = singleArcInterfaces_[ i ];
+            const auto& rhsPtr = rhsDerived->singleArcInterfaces_[ i ];
+            if( static_cast< bool >( lhsPtr ) != static_cast< bool >( rhsPtr ) ) return false;
+            if( lhsPtr && rhsPtr && *lhsPtr != *rhsPtr ) return false;
+        }
+        return arcStartTimes_ == rhsDerived->arcStartTimes_ && arcEndTimes_ == rhsDerived->arcEndTimes_;
+    }
+
+    template< class Archive >
+    void save( Archive& ar ) const
+    {
+        ar( cereal::base_class< DependentVariablesInterface< TimeType > >( this ) );
+        ar( CEREAL_NVP( singleArcInterfaces_ ) );
+        ar( CEREAL_NVP( arcStartTimes_ ) );
+        ar( CEREAL_NVP( arcEndTimes_ ) );
+        // Skip: numberArcs_ (redundant with singleArcInterfaces_.size())
+        // Skip: lookUpscheme_ (reconstructed from arc times)
+    }
+
+    template< class Archive >
+    void load( Archive& ar )
+    {
+        ar( cereal::base_class< DependentVariablesInterface< TimeType > >( this ) );
+        ar( CEREAL_NVP( singleArcInterfaces_ ) );
+        ar( CEREAL_NVP( arcStartTimes_ ) );
+        ar( CEREAL_NVP( arcEndTimes_ ) );
+        // Reconstruct derived data after loading
+        numberArcs_ = static_cast< int >( singleArcInterfaces_.size( ) );
+        if( arcStartTimes_.size( ) > 0 )
+        {
+            std::vector< double > arcSplitTimes = arcStartTimes_;
+            arcSplitTimes.push_back( std::numeric_limits< double >::max( ) );
+            lookUpscheme_ = std::make_shared< interpolators::HuntingAlgorithmLookupScheme< double > >( arcSplitTimes );
+        }
+    }
 };
 
 //! Interface object of interpolation of numerically propagated dependent variables for a hybrid of

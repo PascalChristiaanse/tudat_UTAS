@@ -16,6 +16,12 @@
 #include <string>
 #include <vector>
 
+#include <cereal/access.hpp>
+#include <cereal/types/map.hpp>
+#include <cereal/types/string.hpp>
+
+#include "tudat/io/serialization/base.h"
+
 namespace tudat
 {
 
@@ -66,31 +72,39 @@ struct LinkEndId {
         return std::make_pair( bodyName_, getReferencePointName( ) );
     }
 
-    friend bool operator==( const LinkEndId& linkEnd1, const LinkEndId& linkEnd2 )
+    bool operator==( const LinkEndId& rhs ) const
     {
-        return ( ( linkEnd1.bodyName_ == linkEnd2.bodyName_ ) && ( linkEnd1.stationName_ == linkEnd2.stationName_ ) );
+        return equals( rhs );
     }
 
-    friend bool operator!=( const LinkEndId& linkEnd1, const LinkEndId& linkEnd2 )
+    bool operator!=( const LinkEndId& rhs ) const
     {
-        return !operator==( linkEnd1, linkEnd2 );
+        return !operator==( rhs );
     }
 
-    friend bool operator<( const LinkEndId& linkEnd1, const LinkEndId& linkEnd2 )
+    //! Equality comparison for LinkEndId
+    bool equals( const LinkEndId& rhs ) const
     {
-        if( linkEnd1.bodyName_ < linkEnd2.bodyName_ )
+        return bodyName_ == rhs.bodyName_ && stationName_ == rhs.stationName_;
+    }
+
+    TUDAT_DEFINE_FILE_IO( LinkEndId )
+
+    bool operator<( const LinkEndId& rhs ) const
+    {
+        if( bodyName_ < rhs.bodyName_ )
         {
             return true;
         }
-        else if( linkEnd1.bodyName_ > linkEnd2.bodyName_ )
+        else if( bodyName_ > rhs.bodyName_ )
         {
             return false;
         }
-        else if( linkEnd1.stationName_ < linkEnd2.stationName_ )
+        else if( stationName_ < rhs.stationName_ )
         {
             return true;
         }
-        else if( linkEnd1.stationName_ > linkEnd2.stationName_ )
+        else if( stationName_ > rhs.stationName_ )
         {
             return false;
         }
@@ -117,6 +131,23 @@ struct LinkEndId {
     std::string getStationName( ) const
     {
         return stationName_;
+    }
+
+private:
+    friend class cereal::access;
+
+    template< class Archive >
+    void save( Archive& ar ) const
+    {
+        ar( CEREAL_NVP( bodyName_ ) );
+        ar( CEREAL_NVP( stationName_ ) );
+    }
+
+    template< class Archive >
+    void load( Archive& ar )
+    {
+        ar( CEREAL_NVP( bodyName_ ) );
+        ar( CEREAL_NVP( stationName_ ) );
     }
 };
 
@@ -186,11 +217,27 @@ struct LinkDefinition {
         return static_cast< unsigned int >( linkEnds_.size( ) );
     }
 
-    friend bool operator==( const LinkDefinition& linkEnds1, const LinkDefinition& linkEnds2 )
+    bool operator==( const LinkDefinition& rhs ) const
+    {
+        return equals( rhs );
+    }
+
+    bool operator!=( const LinkDefinition& rhs ) const
+    {
+        return !operator==( rhs );
+    }
+
+    //    friend bool operator< ( const LinkEnds& linkEnds1, const LinkEnds& linkEnds2 )
+    //    {
+    //        return linkEnds1.linkEnds_ < linkEnds2.linkEnds_;
+    //    }
+
+    //! Equality comparison for LinkDefinition
+    bool equals( const LinkDefinition& rhs ) const
     {
         bool isEqual = true;
-        std::map< LinkEndType, LinkEndId > firstLinkEnds = linkEnds1.linkEnds_;
-        std::map< LinkEndType, LinkEndId > secondLinkEnds = linkEnds2.linkEnds_;
+        std::map< LinkEndType, LinkEndId > firstLinkEnds = linkEnds_;
+        std::map< LinkEndType, LinkEndId > secondLinkEnds = rhs.linkEnds_;
 
         std::map< LinkEndType, LinkEndId >::iterator firstLinkEndIterator = firstLinkEnds.begin( );
         std::map< LinkEndType, LinkEndId >::iterator secondLinkEndIterator = secondLinkEnds.begin( );
@@ -218,14 +265,21 @@ struct LinkDefinition {
         return isEqual;
     }
 
-    //    friend bool operator< ( const LinkEnds& linkEnds1, const LinkEnds& linkEnds2 )
-    //    {
-    //        return linkEnds1.linkEnds_ < linkEnds2.linkEnds_;
-    //    }
+    TUDAT_DEFINE_FILE_IO( LinkDefinition )
 
-    friend bool operator!=( const LinkEnds& linkEnds1, const LinkEnds& linkEnds2 )
+private:
+    friend class cereal::access;
+
+    template< class Archive >
+    void save( Archive& ar ) const
     {
-        return !operator==( linkEnds1, linkEnds2 );
+        ar( CEREAL_NVP( linkEnds_ ) );
+    }
+
+    template< class Archive >
+    void load( Archive& ar )
+    {
+        ar( CEREAL_NVP( linkEnds_ ) );
     }
 };
 

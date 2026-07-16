@@ -17,12 +17,18 @@
 #include <memory>
 #include <vector>
 
+#include <cereal/access.hpp>
+#include <cereal/types/map.hpp>
+#include <cereal/types/memory.hpp>
+#include <cereal/types/vector.hpp>
+
 #include "tudat/astro/observation_models/linkTypeDefs.h"
 #include "tudat/astro/observation_models/observableTypes.h"
 #include "tudat/basics/basicTypedefs.h"
 #include "tudat/basics/timeType.h"
 #include "tudat/basics/tudatTypeTraits.h"
 #include "tudat/basics/utilities.h"
+#include "tudat/io/serialization/base.h"
 #include "tudat/simulation/estimation_setup/observationOutput.h"
 #include "tudat/simulation/estimation_setup/observationsProcessing.h"
 #include "tudat/simulation/estimation_setup/singleObservationSet.h"
@@ -2634,6 +2640,46 @@ private:
     int totalObservableSize_;
 
     int totalNumberOfObservables_;
+
+public:
+    bool operator==( const ObservationCollection& rhs ) const
+    {
+        return equals( rhs );
+    }
+
+    bool operator!=( const ObservationCollection& rhs ) const
+    {
+        return !( *this == rhs );
+    }
+
+    //! Equality comparison via equals method
+    bool equals( const ObservationCollection& rhs ) const
+    {
+        return observationSetList_ == rhs.observationSetList_;
+    }
+
+    TUDAT_DEFINE_BINARY_IO( ObservationCollection< ObservationScalarType, TimeType > )
+
+private:
+    friend class cereal::access;
+
+    template< class Archive >
+    void save( Archive& ar ) const
+    {
+        // Only serialize the core data - all index maps are reconstructed
+        ar( observationSetList_ );
+    }
+
+    template< class Archive >
+    void load( Archive& ar )
+    {
+        // Only serialize the core data - all index maps are reconstructed
+        ar( observationSetList_ );
+
+        // Reconstruct all derived data after loading
+        setObservationSetIndices( );
+        setConcatenatedObservationsAndTimes( );
+    }
 };
 
 template< typename ObservationScalarType = double,

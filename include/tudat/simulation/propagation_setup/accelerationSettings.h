@@ -16,11 +16,6 @@
 #include <iostream>
 #include <memory>
 
-#include <cereal/cereal.hpp>
-#include <cereal/access.hpp>
-#include <cereal/types/base_class.hpp>
-#include <cereal/types/polymorphic.hpp>
-
 #include <tuple>
 #include "tudat/astro/gravitation/centralGravityModel.h"
 #include "tudat/astro/gravitation/sphericalHarmonicsGravityModel.h"
@@ -30,7 +25,8 @@
 #include "tudat/astro/reference_frames/referenceFrameTransformations.h"
 #include "tudat/basics/deprecationWarnings.h"
 #include "tudat/simulation/environment_setup/createRadiationPressureTargetModel.h"
-#include "tudat/io/serialization/base.h"
+#include "tudat/io/serialization/core.h"
+#include "tudat/io/serialization/file_io_declarations.h"
 
 // #include "tudat/math/interpolators/createInterpolator.h"
 
@@ -75,7 +71,7 @@ public:
     }
 
     //! Save acceleration settings to a JSON file
-    TUDAT_DEFINE_FILE_IO_POLYMORPHIC( AccelerationSettings )
+    TUDAT_DECLARE_FILE_IO_POLYMORPHIC( AccelerationSettings )
 
 protected:
     // Default constructor for serialization
@@ -458,6 +454,47 @@ public:
     int maximumDegreeOfBody2_;
 
     int maximumDegreeOfCentralBody_;
+
+protected:
+    // Default constructor for serialization
+    FullTwoBodySphericalHarmonicAccelerationSettings( ):
+        maximumDegreeOfBody1_( 0 ), maximumDegreeOfBody2_( 0 ), maximumDegreeOfCentralBody_( 0 )
+    {}
+
+    bool equals( const AccelerationSettings& other ) const override
+    {
+        const auto* rhs = dynamic_cast< const FullTwoBodySphericalHarmonicAccelerationSettings* >( &other );
+        return rhs != nullptr && AccelerationSettings::equals( other ) &&
+                coefficientCombinationsToUse_ == rhs->coefficientCombinationsToUse_ &&
+                coefficientCombinationsToUseForCentralBody_ == rhs->coefficientCombinationsToUseForCentralBody_ &&
+                maximumDegreeOfBody1_ == rhs->maximumDegreeOfBody1_ && maximumDegreeOfBody2_ == rhs->maximumDegreeOfBody2_ &&
+                maximumDegreeOfCentralBody_ == rhs->maximumDegreeOfCentralBody_;
+    }
+
+private:
+    friend class cereal::access;
+
+    template< class Archive >
+    void save( Archive& ar ) const
+    {
+        ar( cereal::base_class< AccelerationSettings >( this ) );
+        ar( CEREAL_NVP( coefficientCombinationsToUse_ ),
+            CEREAL_NVP( coefficientCombinationsToUseForCentralBody_ ),
+            CEREAL_NVP( maximumDegreeOfBody1_ ),
+            CEREAL_NVP( maximumDegreeOfBody2_ ),
+            CEREAL_NVP( maximumDegreeOfCentralBody_ ) );
+    }
+
+    template< class Archive >
+    void load( Archive& ar )
+    {
+        ar( cereal::base_class< AccelerationSettings >( this ) );
+        ar( CEREAL_NVP( coefficientCombinationsToUse_ ),
+            CEREAL_NVP( coefficientCombinationsToUseForCentralBody_ ),
+            CEREAL_NVP( maximumDegreeOfBody1_ ),
+            CEREAL_NVP( maximumDegreeOfBody2_ ),
+            CEREAL_NVP( maximumDegreeOfCentralBody_ ) );
+    }
 };
 
 inline std::shared_ptr< AccelerationSettings > fullTwoBodySphericalHarmonicAcceleration(

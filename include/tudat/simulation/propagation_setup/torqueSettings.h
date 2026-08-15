@@ -11,11 +11,8 @@
 #ifndef TUDAT_TORQUESETTINGS_H
 #define TUDAT_TORQUESETTINGS_H
 
-#include <cereal/access.hpp>
-#include <cereal/types/base_class.hpp>
-#include <cereal/types/polymorphic.hpp>
-
-#include "tudat/io/serialization/base.h"
+#include "tudat/io/serialization/core.h"
+#include "tudat/io/serialization/file_io_declarations.h"
 
 #include "tudat/astro/basic_astro/torqueModelTypes.h"
 #include "tudat/simulation/propagation_setup/accelerationSettings.h"
@@ -67,7 +64,7 @@ public:
     }
 
     //! Save torque settings to a JSON file
-    TUDAT_DEFINE_FILE_IO_POLYMORPHIC( TorqueSettings )
+    TUDAT_DECLARE_FILE_IO_POLYMORPHIC( TorqueSettings )
 
 protected:
     // Default constructor for serialization
@@ -160,6 +157,40 @@ public:
     {}
 
     std::shared_ptr< AccelerationSettings > fullTwoBodySphericalHarmonicAccelerationSettings_;
+
+protected:
+    // Default constructor for serialization
+    FullTwoBodySphericalHarmonicTorqueSettings( ): fullTwoBodySphericalHarmonicAccelerationSettings_( nullptr ) {}
+
+    bool equals( const TorqueSettings& rhs ) const override
+    {
+        const auto* derived = dynamic_cast< const FullTwoBodySphericalHarmonicTorqueSettings* >( &rhs );
+        if( derived == nullptr || !TorqueSettings::equals( rhs ) )
+        {
+            return false;
+        }
+        return ( fullTwoBodySphericalHarmonicAccelerationSettings_ == derived->fullTwoBodySphericalHarmonicAccelerationSettings_ ) ||
+                ( fullTwoBodySphericalHarmonicAccelerationSettings_ != nullptr &&
+                  derived->fullTwoBodySphericalHarmonicAccelerationSettings_ != nullptr &&
+                  *fullTwoBodySphericalHarmonicAccelerationSettings_ == *derived->fullTwoBodySphericalHarmonicAccelerationSettings_ );
+    }
+
+private:
+    friend class cereal::access;
+
+    template< class Archive >
+    void save( Archive& ar ) const
+    {
+        ar( cereal::base_class< TorqueSettings >( this ) );
+        ar( CEREAL_NVP( fullTwoBodySphericalHarmonicAccelerationSettings_ ) );
+    }
+
+    template< class Archive >
+    void load( Archive& ar )
+    {
+        ar( cereal::base_class< TorqueSettings >( this ) );
+        ar( CEREAL_NVP( fullTwoBodySphericalHarmonicAccelerationSettings_ ) );
+    }
 };
 
 class FourthDegreeFullTwoBodyGravitationalTorqueSettings : public TorqueSettings
@@ -168,6 +199,28 @@ public:
     FourthDegreeFullTwoBodyGravitationalTorqueSettings( ):
         TorqueSettings( basic_astrodynamics::fourth_degree_full_two_body_gravitational_torque )
     {}
+
+protected:
+    bool equals( const TorqueSettings& rhs ) const override
+    {
+        return dynamic_cast< const FourthDegreeFullTwoBodyGravitationalTorqueSettings* >( &rhs ) != nullptr &&
+                TorqueSettings::equals( rhs );
+    }
+
+private:
+    friend class cereal::access;
+
+    template< class Archive >
+    void save( Archive& ar ) const
+    {
+        ar( cereal::base_class< TorqueSettings >( this ) );
+    }
+
+    template< class Archive >
+    void load( Archive& ar )
+    {
+        ar( cereal::base_class< TorqueSettings >( this ) );
+    }
 };
 
 inline Eigen::Vector3d applyTorqueScalingFunction( const std::function< Eigen::Vector3d( const double ) > torqueFunction,

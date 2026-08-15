@@ -19,11 +19,8 @@
 #include <tudat/math/root_finders/secantRootFinder.h>
 #include <tudat/math/root_finders/terminationConditions.h>
 
-#include <cereal/cereal.hpp>
-#include <cereal/access.hpp>
-#include <cereal/types/base_class.hpp>
-
-#include <tudat/io/serialization/base.h>
+#include <tudat/io/serialization/core.h>
+#include <tudat/io/serialization/file_io_declarations.h>
 
 namespace tudat
 {
@@ -71,7 +68,7 @@ public:
     }
 
     //! Save root finder settings to a JSON file
-    TUDAT_DEFINE_FILE_IO( RootFinderSettings )
+    TUDAT_DECLARE_FILE_IO( RootFinderSettings )
 
     //! Type of root finder to be used
     RootFinderType rootFinderType_;
@@ -97,20 +94,15 @@ protected:
     // Used for serialization testing
     bool equals( const RootFinderSettings& other ) const
     {
-        const auto* rhs = dynamic_cast< const RootFinderSettings* >( &other );
-        if( !rhs )
-        {
-            return false;
-        }
-        return rootFinderType_ == rhs->rootFinderType_ &&
-                ( relativeIndependentVariableTolerance_ == rhs->relativeIndependentVariableTolerance_ ||
-                  ( std::isnan( relativeIndependentVariableTolerance_ ) && std::isnan( rhs->relativeIndependentVariableTolerance_ ) ) ) &&
-                ( absoluteIndependentVariableTolerance_ == rhs->absoluteIndependentVariableTolerance_ ||
-                  ( std::isnan( absoluteIndependentVariableTolerance_ ) && std::isnan( rhs->absoluteIndependentVariableTolerance_ ) ) ) &&
-                ( rootFunctionTolerance_ == rhs->rootFunctionTolerance_ ||
-                  ( std::isnan( rootFunctionTolerance_ ) && std::isnan( rhs->rootFunctionTolerance_ ) ) ) &&
-                maximumNumberOfIterations_ == rhs->maximumNumberOfIterations_ &&
-                maximumIterationHandling_ == rhs->maximumIterationHandling_;
+        return rootFinderType_ == other.rootFinderType_ &&
+                ( relativeIndependentVariableTolerance_ == other.relativeIndependentVariableTolerance_ ||
+                  ( std::isnan( relativeIndependentVariableTolerance_ ) && std::isnan( other.relativeIndependentVariableTolerance_ ) ) ) &&
+                ( absoluteIndependentVariableTolerance_ == other.absoluteIndependentVariableTolerance_ ||
+                  ( std::isnan( absoluteIndependentVariableTolerance_ ) && std::isnan( other.absoluteIndependentVariableTolerance_ ) ) ) &&
+                ( rootFunctionTolerance_ == other.rootFunctionTolerance_ ||
+                  ( std::isnan( rootFunctionTolerance_ ) && std::isnan( other.rootFunctionTolerance_ ) ) ) &&
+                maximumNumberOfIterations_ == other.maximumNumberOfIterations_ &&
+                maximumIterationHandling_ == other.maximumIterationHandling_;
     }
 
 private:

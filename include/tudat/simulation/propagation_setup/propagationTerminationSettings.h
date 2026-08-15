@@ -18,13 +18,8 @@
 #include "tudat/math/root_finders/createRootFinder.h"
 #include "tudat/simulation/propagation_setup/propagationOutputSettings.h"
 
-#include <iostream>
-
-#include <cereal/access.hpp>
-#include <cereal/types/base_class.hpp>
-#include <cereal/types/polymorphic.hpp>
-#include <cereal/types/memory.hpp>
-#include <cereal/types/vector.hpp>
+#include "tudat/io/serialization/core.h"
+#include "tudat/io/serialization/file_io_declarations.h"
 
 namespace tudat
 {
@@ -84,7 +79,7 @@ public:
     }
 
     //! Save termination settings to a JSON file
-    TUDAT_DEFINE_FILE_IO_POLYMORPHIC( PropagationTerminationSettings )
+    TUDAT_DECLARE_FILE_IO_POLYMORPHIC( PropagationTerminationSettings )
 
 public:
     //! Default constructor for cereal deserialization
@@ -291,7 +286,7 @@ protected:
         if( !PropagationTerminationSettings::equals( rhs ) ) return false;
         if( limitValue_ != derived->limitValue_ ) return false;
         if( useAsLowerLimit_ != derived->useAsLowerLimit_ ) return false;
-        // Compare shared_ptr: both null → equal; both non-null → compare raw pointers
+        // Compare shared_ptr targets by value so independently deserialized settings can be equal.
         if( static_cast< bool >( terminationRootFinderSettings_ ) != static_cast< bool >( derived->terminationRootFinderSettings_ ) )
             return false;
         if( terminationRootFinderSettings_ && derived->terminationRootFinderSettings_ &&

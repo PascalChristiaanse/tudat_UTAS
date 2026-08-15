@@ -11,10 +11,6 @@
 #ifndef TUDAT_OBSERVATIONOUTPUT
 #define TUDAT_OBSERVATIONOUTPUT
 
-#include <cereal/access.hpp>
-#include <cereal/types/memory.hpp>
-#include <cereal/types/vector.hpp>
-
 #include <functional>
 #include <map>
 #include <memory>
@@ -30,6 +26,8 @@
 #include "tudat/simulation/environment_setup/body.h"
 #include "tudat/simulation/estimation_setup/observationInterfacesForwardDeclarations.h"
 #include "tudat/simulation/estimation_setup/observationOutputSettings.h"
+#include "tudat/io/serialization/core.h"
+#include "tudat/io/serialization/file_io_declarations.h"
 
 namespace tudat
 {
@@ -170,7 +168,7 @@ public:
     }
 
     //! Save dependent variable bookkeeping to a binary file
-    TUDAT_DEFINE_BINARY_IO( ObservationDependentVariableBookkeeping )
+    TUDAT_DECLARE_BINARY_IO( ObservationDependentVariableBookkeeping )
 
     bool operator==( const ObservationDependentVariableBookkeeping& rhs ) const
     {
@@ -191,10 +189,28 @@ protected:
     // Used for serialization testing
     bool equals( const ObservationDependentVariableBookkeeping& other ) const
     {
-        return observableType_ == other.observableType_ && linkEnds_ == other.linkEnds_ && settingsList_ == other.settingsList_ &&
+        const auto settingsListsEqual = []( const auto& lhs, const auto& rhs ) {
+            if( lhs.size( ) != rhs.size( ) )
+            {
+                return false;
+            }
+            for( std::size_t i = 0; i < lhs.size( ); ++i )
+            {
+                if( static_cast< bool >( lhs.at( i ) ) != static_cast< bool >( rhs.at( i ) ) ||
+                    ( lhs.at( i ) && *lhs.at( i ) != *rhs.at( i ) ) )
+                {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        return observableType_ == other.observableType_ && linkEnds_ == other.linkEnds_ &&
+                settingsListsEqual( settingsList_, other.settingsList_ ) &&
                 dependentVariableStartIndices_ == other.dependentVariableStartIndices_ &&
                 dependentVariableSizes_ == other.dependentVariableSizes_ &&
-                totalDependentVariableSize_ == other.totalDependentVariableSize_ && deferredSettings_ == other.deferredSettings_;
+                totalDependentVariableSize_ == other.totalDependentVariableSize_ &&
+                settingsListsEqual( deferredSettings_, other.deferredSettings_ );
     }
 
 private:
@@ -209,6 +225,7 @@ private:
         ar( CEREAL_NVP( dependentVariableStartIndices_ ) );
         ar( CEREAL_NVP( dependentVariableSizes_ ) );
         ar( CEREAL_NVP( totalDependentVariableSize_ ) );
+        ar( CEREAL_NVP( deferredSettings_ ) );
     }
 
     template< class Archive >
@@ -220,6 +237,7 @@ private:
         ar( CEREAL_NVP( dependentVariableStartIndices_ ) );
         ar( CEREAL_NVP( dependentVariableSizes_ ) );
         ar( CEREAL_NVP( totalDependentVariableSize_ ) );
+        ar( CEREAL_NVP( deferredSettings_ ) );
     }
 
     observation_models::ObservableType observableType_;

@@ -19,8 +19,7 @@
 #include <pybind11/stl.h>
 
 #include "scalarTypes.h"
-#include "tudat/io/serialization/pybind_helpers.h"
-#include "tudat/simulation/estimation_setup/createObservationModel.h"
+#include "tudat/simulation/estimation_setup/createObservationModelSettings.h"
 
 namespace tom = tudat::observation_models;
 
@@ -98,6 +97,8 @@ Examples
             .value( "observer", tom::LinkEndType::observer )
             .value( "observed_body", tom::LinkEndType::observed_body )
             .export_values( );
+
+    auto link_end_id = py::class_< tom::LinkEndId, std::shared_ptr< tom::LinkEndId > >( m, "LinkEndId" );
 
     m.def( "one_way_downlink_link_ends",
            &tom::getOneWayDownlinkLinkEndsList,
@@ -245,9 +246,7 @@ Examples
     // ###########      Observation Model Settings
     // ################
 
-    py::class_< tom::LinkEndId, std::shared_ptr< tom::LinkEndId > >( m,
-                                                                     "LinkEndId",
-                                                                     R"doc(
+    link_end_id.doc( ) = R"doc(
 
          Base class serving as identifier of a specific link end.
 
@@ -279,7 +278,8 @@ Examples
          print(f'LinkEndType: {link_type.name}, LinkEndId: {link_name.body_name}')
 
 
-      )doc" )
+      )doc";
+    link_end_id
             .def_property_readonly( "body_name",
                                     &tom::LinkEndId::getBodyName,
                                     R"doc(
@@ -336,7 +336,7 @@ Examples
 
 
 
-      )doc" ) TUDATPY_DEF_PICKLE( tom::LinkEndId )
+      )doc" )
             .def_property_readonly( "station_name",
                                     &tom::LinkEndId::getReferencePointName,
                                     R"doc(
@@ -344,8 +344,7 @@ Examples
       )doc" )
             .def( py::init< const std::string& >( ), py::arg( "body_name" ) )
             .def( py::init< const std::string&, const std::string& >( ), py::arg( "body_name" ), py::arg( "station_name" ) )
-            .def( py::init< const std::pair< std::string, std::string >& >( ), py::arg( "link_end" ) ) TUDATPY_DEF_EQ_NE( tom::LinkEndId )
-                    TUDATPY_DEF_FILE_IO( tom::LinkEndId );
+            .def( py::init< const std::pair< std::string, std::string >& >( ), py::arg( "link_end" ) );
 
     m.def( "body_origin_link_end_id",
            py::overload_cast< const std::string& >( &tom::linkEndId ),
@@ -515,8 +514,7 @@ Examples
 
              Attribute that contains the dictionary with link end type (as key) and link end if (as value).
 
-          )doc" ) TUDATPY_DEF_PICKLE( tom::LinkDefinition ) TUDATPY_DEF_EQ_NE( tom::LinkDefinition )
-                    TUDATPY_DEF_FILE_IO( tom::LinkDefinition );
+          )doc" );
 
     m.def( "link_definition",
            &tom::linkDefinition,

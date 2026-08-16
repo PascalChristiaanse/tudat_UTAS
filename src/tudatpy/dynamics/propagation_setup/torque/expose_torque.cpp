@@ -35,8 +35,6 @@
 #include "tudat/simulation/propagation_setup/propagationTerminationSettings.h"
 #include "tudat/simulation/propagation_setup/setNumericallyIntegratedStates.h"
 #include "tudat/simulation/propagation_setup/torqueSettings.h"
-#include "tudat/io/serialization/pybind_helpers.h"
-#include "tudat/io/serialization/registrations_acceleration.h"
 
 namespace py = pybind11;
 namespace tba = tudat::basic_astrodynamics;
@@ -47,7 +45,6 @@ namespace te = tudat::ephemerides;
 namespace tni = tudat::numerical_integrators;
 namespace trf = tudat::reference_frames;
 namespace tmrf = tudat::root_finders;
-namespace tse = tudat::serialization;
 
 namespace tudat
 {
@@ -137,8 +134,7 @@ void expose_torque_setup( py::module& m )
 
 
 
-      )doc" ) TUDATPY_DEF_EQ_NE( tss::TorqueSettings ) TUDATPY_DEF_PICKLE_POLYMORPHIC( tss::TorqueSettings )
-            TUDATPY_DEF_FILE_IO_POLYMORPHIC( tss::TorqueSettings );
+      )doc" );
 
     py::class_< tss::SphericalHarmonicTorqueSettings, std::shared_ptr< tss::SphericalHarmonicTorqueSettings >, tss::TorqueSettings >(
             m,
@@ -153,8 +149,7 @@ void expose_torque_setup( py::module& m )
 
 
 
-      )doc" ) TUDATPY_DEF_EQ_NE( tss::SphericalHarmonicTorqueSettings )
-            TUDATPY_DEF_PICKLE_POLYMORPHIC_DERIVED( tss::TorqueSettings, tss::SphericalHarmonicTorqueSettings );
+      )doc" );
 
     py::class_< tss::FullTwoBodySphericalHarmonicTorqueSettings,
                 std::shared_ptr< tss::FullTwoBodySphericalHarmonicTorqueSettings >,
@@ -504,10 +499,13 @@ void expose_torque_setup( py::module& m )
     m.def( "custom_torque",
            &tss::customTorqueSettings,
            py::arg( "torque_function" ),
-           py::arg( "scaling_function" ) = nullptr,
+           py::arg_v( "scaling_function", std::function< double( const double ) >( ), "None" ),
            R"doc(No documentation found.)doc" );
 
-    m.def( "custom", &tss::customTorqueSettingsDeprecated, py::arg( "torque_function" ), py::arg( "scaling_function" ) = nullptr );
+    m.def( "custom",
+           &tss::customTorqueSettingsDeprecated,
+           py::arg( "torque_function" ),
+           py::arg_v( "scaling_function", std::function< double( const double ) >( ), "None" ) );
 
     // NOTE: the only unexposed torque model is
     // dissipativeTorque, but it is probably obsolete

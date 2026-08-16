@@ -48,33 +48,52 @@ if bool(os.getenv("READTHEDOCS")) is True:
 
 else:
     # when building locally, use the binaries generated with tudat-bundle
-    sys.path.insert(0, os.path.abspath("../../../build/tudatpy"))
+    local_build_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../../..", "build", "src")
+    )
+    sys.path.insert(0, local_build_path)
 
 
-def has_mcd_support():
-    """Return whether the imported tudatpy build exposes atmosphere.mcd."""
+def module_has_members(module_name, member_names):
     try:
-        atmosphere = importlib.import_module("tudatpy.dynamics.environment_setup.atmosphere")
+        module = importlib.import_module(module_name)
     except Exception:
         return False
-    return hasattr(atmosphere, "mcd")
+    return all(hasattr(module, member_name) for member_name in member_names)
 
 
-HAS_MCD_SUPPORT = has_mcd_support()
+has_mcd_support = module_has_members(
+    "tudatpy.dynamics.environment_setup.atmosphere",
+    [
+        "mars_climate_database_atmosphere_model",
+        "mars_climate_database_climate_model",
+    ],
+)
+
+MCD_DOCUMENTATION_MARKER = ".. tudatpy-mcd-documentation"
+MCD_DOCUMENTATION = """
+Mars Climate Database
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autosummary::
+
+   tudatpy.dynamics.environment_setup.atmosphere.mars_climate_database_climate_model
+   tudatpy.dynamics.environment_setup.atmosphere.mars_climate_database_atmosphere_model
+
+.. autofunction:: tudatpy.dynamics.environment_setup.atmosphere.mars_climate_database_climate_model
+
+.. autofunction:: tudatpy.dynamics.environment_setup.atmosphere.mars_climate_database_atmosphere_model
+"""
 
 
-def filter_mcd_docs(app, docname, source):
-    """Hide MCD docs when the imported tudatpy build has no MCD support."""
-    if docname != "dynamics/environment_setup/atmosphere" or HAS_MCD_SUPPORT:
+def insert_optional_mcd_documentation(app, docname, source):
+    """Insert MCD API directives only when the built module provides them."""
+
+    if docname != "dynamics/environment_setup/atmosphere":
         return
 
-    text = source[0]
-    text = text.replace("\n   mcd\n", "\n")
-    text = text.replace(
-        "\n.. autofunction:: tudatpy.dynamics.environment_setup.atmosphere.mcd\n",
-        "\n",
-    )
-    source[0] = text
+    replacement = MCD_DOCUMENTATION if app.config.has_mcd_support else ""
+    source[0] = source[0].replace(MCD_DOCUMENTATION_MARKER, replacement)
 
 
 # -- General configuration ------------------------------------------------
@@ -397,11 +416,12 @@ def simplify_signature_types(app, what, name, obj, options, signature, return_an
 
 
 def setup(app):
+    app.add_config_value("has_mcd_support", has_mcd_support, "env")
+    app.connect("source-read", insert_optional_mcd_documentation)
     app.connect("autodoc-process-docstring", process_constants_docstring)
     # run before default-priority (500) docstring processors
     app.connect("autodoc-process-docstring", fix_docstring_section_title_spacing, priority=200)
     app.connect("autodoc-process-signature", simplify_signature_types)
-    app.connect("source-read", filter_mcd_docs)
 
 
 # Add any paths that contain templates here, relative to this directory.

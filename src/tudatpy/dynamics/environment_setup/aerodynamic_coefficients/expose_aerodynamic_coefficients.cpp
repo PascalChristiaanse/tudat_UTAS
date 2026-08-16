@@ -75,7 +75,7 @@ namespace environment_setup
 namespace aerodynamic_coefficients
 {
 
-void expose_aerodynamic_coefficient_setup( py::module& m )
+void expose_aerodynamic_coefficient_types( py::module& m )
 {
     py::enum_< ta::AerodynamicCoefficientsIndependentVariables >( m,
                                                                   "AerodynamicCoefficientsIndependentVariables",
@@ -215,6 +215,10 @@ The coefficients are defined in aerodynamic frame, with the directions the same 
             .value( "anomalous_o_species", ta::AtmosphericCompositionSpecies::anomalous_o_species, R"doc(No documentation found.)doc" )
             .export_values( );
 
+    py::class_< tss::ControlSurfaceIncrementAerodynamicCoefficientSettings,
+                std::shared_ptr< tss::ControlSurfaceIncrementAerodynamicCoefficientSettings > >(
+            m, "ControlSurfaceIncrementAerodynamicCoefficientSettings", R"doc(No documentation found.)doc" );
+
     py::enum_< trf::AerodynamicsReferenceFrameAngles >( m, "AerodynamicsReferenceFrameAngles", R"doc(
 
 Enumeration of angles typical for (atmospheric) flight dynamics and aerodynamic calculations.
@@ -330,7 +334,10 @@ The body-fixed frame of the body itself.
 
 )doc" )
             .export_values( );
+}
 
+void expose_aerodynamic_coefficient_setup( py::module& m )
+{
     /////////////////////////////////////////////////////////////////////////////
     // createAerodynamicCoefficientInterface.h
     /////////////////////////////////////////////////////////////////////////////
@@ -426,10 +433,6 @@ The body-fixed frame of the body itself.
                 std::shared_ptr< tss::ScaledAerodynamicCoefficientInterfaceSettings >,
                 tss::AerodynamicCoefficientSettings >(
             m, "ScaledAerodynamicCoefficientInterfaceSettings", R"doc(No documentation found.)doc" );
-
-    py::class_< tss::ControlSurfaceIncrementAerodynamicCoefficientSettings,
-                std::shared_ptr< tss::ControlSurfaceIncrementAerodynamicCoefficientSettings > >(
-            m, "ControlSurfaceIncrementAerodynamicCoefficientSettings", R"doc(No documentation found.)doc" );
 
     py::class_< tss::CustomControlSurfaceIncrementAerodynamicCoefficientSettings,
                 std::shared_ptr< tss::CustomControlSurfaceIncrementAerodynamicCoefficientSettings >,
@@ -828,7 +831,7 @@ In this example, we create :class:`~tudatpy.dynamics.environment_setup.aerodynam
            py::arg( "force_coefficients_frame" ) = ta::negative_aerodynamic_frame_coefficients,
            py::arg( "moment_coefficients_frame" ) = ta::body_fixed_frame_coefficients,
            py::arg( "moment_reference_point" ) = Eigen::Vector3d::Constant( TUDAT_NAN ),
-           py::arg( "interpolator_settings" ) = nullptr,
+           py::arg_v( "interpolator_settings", std::shared_ptr< ti::InterpolatorSettings >( ), "None" ),
            R"doc(
 
  Function for creating aerodynamic interface model settings from user-defined, 1-d tabulated coefficients.
@@ -927,7 +930,7 @@ In this example, we create :class:`~tudatpy.dynamics.environment_setup.aerodynam
            py::arg( "reference_area" ),
            py::arg( "independent_variable_name" ),
            py::arg( "force_coefficients_frame" ) = ta::negative_aerodynamic_frame_coefficients,
-           py::arg( "interpolator_settings" ) = ti::linearInterpolation( ),
+           py::arg_v( "interpolator_settings", ti::linearInterpolation( ), "..." ),
            R"doc(
 
  Function for creating aerodynamic interface model settings from user-defined, 1-d tabulated force coefficients.
@@ -999,7 +1002,7 @@ In this example, we create :class:`~tudatpy.dynamics.environment_setup.aerodynam
            py::arg( "reference_area" ),
            py::arg( "independent_variable_names" ),
            py::arg( "force_coefficients_frame" ) = ta::negative_aerodynamic_frame_coefficients,
-           py::arg( "interpolator_settings" ) = nullptr,
+           py::arg_v( "interpolator_settings", std::shared_ptr< ti::InterpolatorSettings >( ), "None" ),
            R"doc(
 
  Function for creating aerodynamic interface model settings from tabulated force coefficients from files.
@@ -1073,7 +1076,7 @@ In this example, we create :class:`~tudatpy.dynamics.environment_setup.aerodynam
            py::arg( "force_coefficients_frame" ) = ta::negative_aerodynamic_frame_coefficients,
            py::arg( "moment_coefficients_frame" ) = ta::body_fixed_frame_coefficients,
            py::arg( "moment_reference_point" ) = Eigen::Vector3d::Constant( TUDAT_NAN ),
-           py::arg( "interpolator_settings" ) = nullptr,
+           py::arg_v( "interpolator_settings", std::shared_ptr< ti::InterpolatorSettings >( ), "None" ),
            R"doc(
 
  Function for creating aerodynamic interface model settings from tabulated coefficients from files.

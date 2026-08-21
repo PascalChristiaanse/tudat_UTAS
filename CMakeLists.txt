@@ -342,7 +342,15 @@ include_directories(TudatResources_INCLUDE_DIRS)
 
 # Find Eigen3 library on local system and include directories.
 find_package(Eigen3 REQUIRED)
+
+get_target_property(
+    EIGEN3_INCLUDE_DIR
+    Eigen3::Eigen
+    INTERFACE_INCLUDE_DIRECTORIES
+)
+
 include_directories(SYSTEM AFTER "${EIGEN3_INCLUDE_DIR}")
+
 if (APPLE OR (WIN32 AND CLANG))
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem \"${EIGEN3_INCLUDE_DIR}\"")
 endif ()

@@ -81,6 +81,23 @@ python install.py -h                 # Show help and available flags
 python install.py -e                 # Install in "editable mode"
 ```
 
+might need to run the following commands if some part of the build failed and imports are not being managed correctly:
+
+```
+mkdir -p "$CONDA_PREFIX/etc/conda/activate.d"
+vim "$CONDA_PREFIX/etc/conda/activate.d/ld_library_path.sh"
+```
+
+inside this document write:
+
+```
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+```
+
+might need to press "i" to edit in vim unless you ctrl+v, then press "esc" and write ":wq" and press "enter" to write and quit.
+
+
+
 > **Note**\
 > This script installs Tudatpy in your active conda environment. If you install with the `-e` flag, you will not have to re-install every time you update the source code of the library.
 > And that's it! The next step shows you what to do if you want to uninstall the libraries.

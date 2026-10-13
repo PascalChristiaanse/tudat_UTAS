@@ -76,15 +76,16 @@ void SingleObservationSet< ObservationScalarType, TimeType, IsStateScalarAndTime
             shouldRemoveObservation = [ &, residualCutOff ]( const unsigned int index ) {
                 const Eigen::Matrix< ObservationScalarType, Eigen::Dynamic, 1 > residualVector =
                         filterOutObservations ? residuals_.at( index ) : filteredObservationSet_->getResidual( index );
+                bool anyExceeds = false;
                 for( unsigned int k = 0; k < singleObservationSize_; ++k )
                 {
-                    const bool passesFilter = std::fabs( residualVector[ k ] ) > residualCutOff[ k ];
-                    if( ( !useOppositeCondition && passesFilter ) || ( useOppositeCondition && !passesFilter ) )
+                    if( std::fabs( residualVector[ k ] ) > residualCutOff[ k ] )
                     {
-                        return true;
+                        anyExceeds = true;
+                        break;
                     }
                 }
-                return false;
+                return useOppositeCondition ? !anyExceeds : anyExceeds;
             };
             break;
         }
@@ -112,15 +113,16 @@ void SingleObservationSet< ObservationScalarType, TimeType, IsStateScalarAndTime
             shouldRemoveObservation = [ &, absoluteValueCutOff ]( const unsigned int index ) {
                 const Eigen::Matrix< ObservationScalarType, Eigen::Dynamic, 1 > observationVector =
                         filterOutObservations ? observations_.at( index ) : filteredObservationSet_->getObservation( index );
+                bool anyExceeds = false;
                 for( unsigned int k = 0; k < singleObservationSize_; ++k )
                 {
-                    const bool passesFilter = observationVector[ k ] > absoluteValueCutOff[ k ];
-                    if( ( !useOppositeCondition && passesFilter ) || ( useOppositeCondition && !passesFilter ) )
+                    if( observationVector[ k ] > absoluteValueCutOff[ k ] )
                     {
-                        return true;
+                        anyExceeds = true;
+                        break;
                     }
                 }
-                return false;
+                return useOppositeCondition ? !anyExceeds : anyExceeds;
             };
             break;
         }
@@ -181,15 +183,16 @@ void SingleObservationSet< ObservationScalarType, TimeType, IsStateScalarAndTime
 
             shouldRemoveObservation =
                     [ &, dependentVariableCutOff, singleDependentVariableValues, dependentVariableSize ]( const unsigned int index ) {
+                        bool anyExceeds = false;
                         for( unsigned int k = 0; k < dependentVariableSize; ++k )
                         {
-                            const bool passesFilter = singleDependentVariableValues( index, k ) > dependentVariableCutOff[ k ];
-                            if( ( !useOppositeCondition && passesFilter ) || ( useOppositeCondition && !passesFilter ) )
+                            if( singleDependentVariableValues( index, k ) > dependentVariableCutOff[ k ] )
                             {
-                                return true;
+                                anyExceeds = true;
+                                break;
                             }
                         }
-                        return false;
+                        return useOppositeCondition ? !anyExceeds : anyExceeds;
                     };
             break;
         }

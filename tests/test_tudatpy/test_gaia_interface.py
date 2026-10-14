@@ -112,10 +112,27 @@ def test_astrometry_retrieval_no_data():
         GaiaAstrometry.load_from_local_archive(ASTROMETRY_ARCHIVE_PATH, [asteroid_no_data])
 
 
-def test_mpc_number_zero_is_rejected():
-    """Natural satellites cannot be distinguished using their shared MPC number zero."""
-    with pytest.raises(ValueError, match="MPC number 0"):
-        GaiaAstrometry(pd.DataFrame({"number_mp": [0]}))
+def test_satellite_astrometry_keyed_by_source_id():
+    """Natural planetary satellites (MPC number 0) are supported, keyed by their Gaia source_id."""
+    table = pd.DataFrame(
+        {
+            "number_mp": [0, 0],
+            "source_id": [-4293959295, -4293959295],
+            "denomination": ["triton", "triton"],
+            "epoch": [0.0, 1.0],
+        }
+    )
+    gaia_astrometry = GaiaAstrometry(table)
+
+    assert list(gaia_astrometry.object_keys_in_table) == [-4293959295]
+    assert len(gaia_astrometry.mpc_numbers_in_table) == 0
+    # Satellites default to their denomination, overridable via the target_names mapping.
+    assert gaia_astrometry._body_name_for_object(-4293959295) == "triton"
+    assert gaia_astrometry._body_name_for_object(-4293959295, {-4293959295: "Triton"}) == "Triton"
+
+
+def test_asteroid_catalog_rejects_mpc_number_zero():
+    """The asteroid catalog interface cannot represent satellites and still rejects MPC number zero."""
     with pytest.raises(ValueError, match="MPC number 0"):
         get_state_from_gaia_archive(0, SOURCE_ARCHIVE_PATH)
 

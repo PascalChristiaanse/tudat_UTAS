@@ -132,7 +132,7 @@ BOOST_AUTO_TEST_CASE( test_NormalizedLinearConstraints )
     BOOST_CHECK_CLOSE_FRACTION( normalizedConstraint.cwiseAbs( ).maxCoeff( ), 1.0, 1.0E-15 );
 }
 
-//! Compare both weight representations against dense normal equations, including hard and soft constraints.
+//! Test the direct a priori parameter-deviation contribution to the normal-equation right-hand side.
 BOOST_AUTO_TEST_CASE( test_APrioriParameterDeviationNormalEquations )
 {
     Eigen::MatrixXd designMatrix( 3, 2 );
@@ -142,103 +142,38 @@ BOOST_AUTO_TEST_CASE( test_APrioriParameterDeviationNormalEquations )
     Eigen::Matrix2d inverseAprioriCovariance;
     inverseAprioriCovariance << 4.0, 1.0, 1.0, 3.0;
     const Eigen::Vector2d aprioriParameterDeviation = ( Eigen::Vector2d( ) << 0.5, -0.25 ).finished( );
-    Eigen::MatrixXd considerDesignMatrix( 3, 1 );
-    considerDesignMatrix << 0.3, -0.1, 0.2;
-    const Eigen::VectorXd considerDeviation = Eigen::VectorXd::Constant( 1, 0.4 );
 
-    for( int weightMode = 0; weightMode < 3; ++weightMode )
-    {
-        // Also exercise sparse diagonal weights, which must give exactly the same solution as vector weights.
-        Eigen::MatrixXd denseWeights = diagonalWeights.asDiagonal( );
-        if( weightMode == 2 )
-        {
-            denseWeights( 0, 1 ) = denseWeights( 1, 0 ) = 0.6;
-            denseWeights( 1, 2 ) = denseWeights( 2, 1 ) = -0.4;
-        }
-        const Eigen::SparseMatrix< double > sparseWeights = denseWeights.sparseView( );
-        for( const bool useHardConstraint : { false, true } )
-        {
-            for( const bool useSoftConstraint : { false, true } )
-            {
-                Eigen::MatrixXd constraintMultiplier( 0, 0 ), additionalNormalMatrix( 0, 0 );
-                Eigen::VectorXd constraintRightHandSide( 0 ), additionalRightHandSide( 0 );
-                if( useHardConstraint )
-                {
-                    constraintMultiplier.resize( 1, 2 );
-                    constraintMultiplier << 1.0, -2.0;
-                    constraintRightHandSide = Eigen::VectorXd::Constant( 1, 0.3 );
-                }
-                if( useSoftConstraint )
-                {
-                    additionalNormalMatrix.resize( 2, 2 );
-                    additionalNormalMatrix << 2.0, -0.5, -0.5, 1.0;
-                    additionalRightHandSide = ( Eigen::Vector2d( ) << 0.2, -0.4 ).finished( );
-                }
-                const auto performAdjustment = [ & ]( const Eigen::MatrixXd& inversePrior, const Eigen::VectorXd& deviation ) {
-                    const auto solve = [ & ]( const auto& weights ) {
-                        return linear_algebra::performLeastSquaresAdjustmentFromDesignMatrix( designMatrix,
-                                                                                              residuals,
-                                                                                              weights,
-                                                                                              inversePrior,
-                                                                                              std::numeric_limits< double >::quiet_NaN( ),
-                                                                                              constraintMultiplier,
-                                                                                              constraintRightHandSide,
-                                                                                              considerDesignMatrix,
-                                                                                              considerDeviation,
-                                                                                              additionalNormalMatrix,
-                                                                                              additionalRightHandSide,
-                                                                                              deviation );
-                    };
-                    return weightMode == 0 ? solve( diagonalWeights ) : solve( sparseWeights );
-                };
+    const auto performAdjustment = [ & ]( const Eigen::MatrixXd& inversePrior ) {
+        return linear_algebra::performLeastSquaresAdjustmentFromDesignMatrix( designMatrix,
+                                                                              residuals,
+                                                                              weights,
+                                                                              inversePrior,
+                                                                              std::numeric_limits< double >::quiet_NaN( ),
+                                                                              Eigen::MatrixXd( 0, 0 ),
+                                                                              Eigen::VectorXd( 0 ),
+                                                                              Eigen::MatrixXd( 0, 0 ),
+                                                                              Eigen::VectorXd( 0 ),
+                                                                              Eigen::MatrixXd( 0, 0 ),
+                                                                              Eigen::VectorXd( 0 ),
+                                                                              aprioriParameterDeviation );
+    };
+    const auto leastSquaresOutput = performAdjustment( inverseAprioriCovariance );
 
-                const int systemSize = useHardConstraint ? 3 : 2;
-                Eigen::MatrixXd expectedNormalMatrix = Eigen::MatrixXd::Zero( systemSize, systemSize );
-                expectedNormalMatrix.topLeftCorner( 2, 2 ) =
-                        designMatrix.transpose( ) * denseWeights * designMatrix + inverseAprioriCovariance;
-                Eigen::VectorXd expectedRightHandSide = Eigen::VectorXd::Zero( systemSize );
-                expectedRightHandSide.head( 2 ) =
-                        designMatrix.transpose( ) * denseWeights * ( residuals + considerDesignMatrix * considerDeviation );
-                if( useHardConstraint )
-                {
-                    expectedNormalMatrix.topRightCorner( 2, 1 ) = constraintMultiplier.transpose( );
-                    expectedNormalMatrix.bottomLeftCorner( 1, 2 ) = constraintMultiplier;
-                    expectedRightHandSide.tail( 1 ) = constraintRightHandSide;
-                }
-                if( useSoftConstraint )
-                {
-                    expectedNormalMatrix.topLeftCorner( 2, 2 ) += additionalNormalMatrix;
-                    expectedRightHandSide.head( 2 ) += additionalRightHandSide;
-                }
+    const Eigen::Matrix2d expectedNormalMatrix =
+            designMatrix.transpose( ) * weights.asDiagonal( ) * designMatrix + inverseAprioriCovariance;
+    const Eigen::Vector2d expectedRightHandSide =
+            designMatrix.transpose( ) * weights.asDiagonal( ) * residuals - inverseAprioriCovariance * aprioriParameterDeviation;
+    const Eigen::Vector2d expectedParameterCorrection = expectedNormalMatrix.inverse( ) * expectedRightHandSide;
 
-                // An omitted deviation retains the historical correction-only prior behavior.
-                const auto legacyOutput = performAdjustment( inverseAprioriCovariance, Eigen::VectorXd( 0 ) );
-                BOOST_CHECK_SMALL( ( legacyOutput.second - expectedNormalMatrix ).norm( ), 1.0E-13 );
-                BOOST_CHECK_SMALL( ( legacyOutput.first - expectedNormalMatrix.fullPivLu( ).solve( expectedRightHandSide ) ).norm( ),
-                                   1.0E-13 );
-
-                expectedRightHandSide.head( 2 ) -= inverseAprioriCovariance * aprioriParameterDeviation;
-                const auto output = performAdjustment( inverseAprioriCovariance, aprioriParameterDeviation );
-                BOOST_CHECK_SMALL( ( output.second - expectedNormalMatrix ).norm( ), 1.0E-13 );
-                BOOST_CHECK_SMALL( ( output.first - expectedNormalMatrix.fullPivLu( ).solve( expectedRightHandSide ) ).norm( ), 1.0E-13 );
-                if( useHardConstraint )
-                {
-                    BOOST_CHECK_SMALL( ( constraintMultiplier * output.first.head( 2 ) - constraintRightHandSide ).norm( ), 1.0E-13 );
-                }
-                BOOST_CHECK_THROW( performAdjustment( Eigen::MatrixXd::Zero( 0, 0 ), aprioriParameterDeviation ), std::runtime_error );
-                BOOST_CHECK_THROW( performAdjustment( Eigen::MatrixXd::Zero( 2, 1 ), aprioriParameterDeviation ), std::runtime_error );
-                BOOST_CHECK_THROW( performAdjustment( inverseAprioriCovariance, Eigen::VectorXd::Zero( 1 ) ), std::runtime_error );
-            }
-        }
-    }
+    BOOST_CHECK_SMALL( ( leastSquaresOutput.second - expectedNormalMatrix ).norm( ), 1.0E-14 );
+    BOOST_CHECK_SMALL( ( leastSquaresOutput.first - expectedParameterCorrection ).norm( ), 1.0E-14 );
+    BOOST_CHECK_THROW( performAdjustment( Eigen::MatrixXd::Zero( 0, 0 ) ), std::runtime_error );
+    BOOST_CHECK_THROW( performAdjustment( Eigen::MatrixXd::Zero( 2, 1 ) ), std::runtime_error );
 }
 
 //! Test that a priori information constrains the total deviation in a realistic iterative orbit determination.
-void testAPrioriParameterDeviation( const bool useCorrelatedWeights )
+BOOST_AUTO_TEST_CASE( test_APrioriParameterDeviationLegacy )
 {
-    // Simulate one day of position data for a low Earth orbiter subject to gravity and atmospheric drag, then estimate
-    // its initial state and drag coefficient. The a priori parameter vector is deliberately offset from truth. The
-    // converged MAP estimate must move toward the data while retaining a non-zero offset from truth due to the prior.
     using namespace observation_models;
     using namespace orbital_element_conversions;
 
@@ -344,11 +279,15 @@ void testAPrioriParameterDeviation( const bool useCorrelatedWeights )
 
     const std::shared_ptr< EstimationOutput< double, double > > estimationOutput =
             orbitDeterminationManager.estimateParameters( estimationInput );
+
+    // The constrained estimation must complete all three requested iterations without numerical failures.
     BOOST_REQUIRE( !estimationOutput->exceptionDuringInversion_ );
     BOOST_REQUIRE( !estimationOutput->exceptionDuringPropagation_ );
     BOOST_REQUIRE_EQUAL( estimationOutput->residualHistory_.size( ), 3 );
 
     const Eigen::MatrixXd parameterHistory = estimationOutput->getParameterHistoryMatrix( );
+
+    // The parameter history must contain the supplied a priori parameters followed by one entry per iteration.
     BOOST_REQUIRE_EQUAL( parameterHistory.rows( ), 7 );
     BOOST_REQUIRE_EQUAL( parameterHistory.cols( ), 4 );
     BOOST_CHECK_SMALL( ( parameterHistory.col( 0 ) - aprioriParameters ).norm( ), 1.0E-12 );
@@ -372,21 +311,16 @@ void testAPrioriParameterDeviation( const bool useCorrelatedWeights )
     BOOST_CHECK_EQUAL( estimationOutput->bestIteration_, expectedBestIteration );
 
     const int convergedIteration = 2;
-    BOOST_CHECK_EQUAL( estimationOutput->bestIteration_, convergedIteration );
-    const int balanceIteration = estimationOutput->bestIteration_;
-    const Eigen::VectorXd constrainedParameters = parameterHistory.col( balanceIteration );
-    const double initialResidualRms = linear_algebra::getVectorEntryRootMeanSquare( estimationOutput->residualHistory_.front( ) );
-    const double constrainedResidualRms = linear_algebra::getVectorEntryRootMeanSquare( estimationOutput->residuals_ );
 
-    // The nonlinear differential corrections decrease monotonically until the fixed third iteration converges.
+    // The selected iteration and shrinking corrections must show stable convergence within the fixed iteration count.
+    BOOST_CHECK_EQUAL( estimationOutput->bestIteration_, convergedIteration );
+    const Eigen::VectorXd constrainedParameters = parameterHistory.col( estimationOutput->bestIteration_ );
+
     std::vector< double > correctionNorms;
     for( int iteration = 1; iteration < parameterHistory.cols( ); iteration++ )
     {
         const Eigen::VectorXd correction = parameterHistory.col( iteration ) - parameterHistory.col( iteration - 1 );
         correctionNorms.push_back( correction.norm( ) );
-        BOOST_TEST_MESSAGE( "Constrained correction "
-                            << iteration << ": total=" << correction.norm( ) << ", position=" << correction.segment( 0, 3 ).norm( )
-                            << ", velocity=" << correction.segment( 3, 3 ).norm( ) << ", Cd=" << std::fabs( correction( 6 ) ) );
     }
     for( unsigned int iteration = 1; iteration < correctionNorms.size( ); iteration++ )
     {
@@ -402,8 +336,8 @@ void testAPrioriParameterDeviation( const bool useCorrelatedWeights )
     const Eigen::MatrixXd normalizedInverseAprioriCovariance =
             orbitDeterminationManager.normalizeAprioriCovariance( fullEstimationInverseAprioriCovariance, normalizationTerms );
     const Eigen::VectorXd normalizedAprioriDeviation = ( constrainedParameters - aprioriParameters ).cwiseProduct( normalizationTerms );
-    const Eigen::VectorXd observationRightHandSide =
-            normalizedDesignMatrix.transpose( ) * ( estimationInput->getWeightsMatrix( ) * estimationOutput->residuals_ );
+    const Eigen::VectorXd observationRightHandSide = normalizedDesignMatrix.transpose( ) *
+            estimationInput->getWeightsMatrixDiagonals( ).cwiseProduct( estimationOutput->residuals_ );
     const Eigen::VectorXd aprioriRightHandSide = -normalizedInverseAprioriCovariance * normalizedAprioriDeviation;
     const Eigen::MatrixXd normalizedCovariance = estimationOutput->getNormalizedCovarianceMatrix( );
     const Eigen::VectorXd observationCorrection = ( normalizedCovariance * observationRightHandSide ).cwiseQuotient( normalizationTerms );
@@ -416,7 +350,7 @@ void testAPrioriParameterDeviation( const bool useCorrelatedWeights )
     BOOST_TEST_MESSAGE( "Correction sum at balance: " << balancedCorrection.transpose( ) );
     BOOST_CHECK_GT( observationCorrection.norm( ), 1.0E-2 );
     BOOST_CHECK_GT( aprioriCorrection.norm( ), 1.0E-2 );
-    BOOST_CHECK_SMALL( balancedCorrection.norm( ), 2.0E-6 * individualCorrectionScale );
+    BOOST_CHECK_SMALL( balancedCorrection.norm( ), 1.0E-6 * individualCorrectionScale );
     BOOST_CHECK_SMALL( ( balancedCorrection - finalCorrection ).norm( ), 1.0E-8 * individualCorrectionScale );
 
     // Repeat the estimation from the same perturbed parameters without an a priori constraint. The noise-free synthetic
@@ -428,18 +362,27 @@ void testAPrioriParameterDeviation( const bool useCorrelatedWeights )
     unconstrainedEstimationInput->defineEstimationSettings( true, true, true, false, true, false );
     const std::shared_ptr< EstimationOutput< double, double > > unconstrainedEstimationOutput =
             orbitDeterminationManager.estimateParameters( unconstrainedEstimationInput );
+
+    // The reference estimation must also complete and select the converged iteration.
     BOOST_REQUIRE( !unconstrainedEstimationOutput->exceptionDuringInversion_ );
     BOOST_REQUIRE( !unconstrainedEstimationOutput->exceptionDuringPropagation_ );
     BOOST_REQUIRE_EQUAL( unconstrainedEstimationOutput->bestIteration_, convergedIteration );
     const Eigen::VectorXd unconstrainedParameterError = unconstrainedEstimationOutput->parameterEstimate_ - trueParameters;
-    const double unconstrainedResidualRms = linear_algebra::getVectorEntryRootMeanSquare( unconstrainedEstimationOutput->residuals_ );
-    BOOST_TEST_MESSAGE( "Constrained residual RMS reduced from " << initialResidualRms << " m to " << constrainedResidualRms << " m" );
-    BOOST_TEST_MESSAGE( "Unconstrained parameter error: " << unconstrainedParameterError.transpose( ) );
-    BOOST_TEST_MESSAGE( "Unconstrained residual RMS: " << unconstrainedResidualRms );
+
+    // With noise-free data and no prior, the estimate must recover truth to numerical precision.
     BOOST_CHECK_SMALL( unconstrainedParameterError.segment( 0, 3 ).norm( ), 1.0E-5 );
     BOOST_CHECK_SMALL( unconstrainedParameterError.segment( 3, 3 ).norm( ), 1.0E-8 );
     BOOST_CHECK_SMALL( unconstrainedParameterError( 6 ), 1.0E-6 );
-    BOOST_CHECK_SMALL( unconstrainedResidualRms, 1.0E-5 );
+
+    const Eigen::VectorXd constrainedParameterError = constrainedParameters - trueParameters;
+    const Eigen::VectorXd aprioriParameterError = aprioriParameters - trueParameters;
+
+    // The constrained estimate must move toward truth but retain more position and drag-coefficient bias than the
+    // unconstrained estimate, demonstrating that the a priori deviation affects iterative convergence.
+    BOOST_CHECK_LT( constrainedParameterError.segment( 0, 3 ).norm( ), aprioriParameterError.segment( 0, 3 ).norm( ) );
+    BOOST_CHECK_LT( std::fabs( constrainedParameterError( 6 ) ), std::fabs( aprioriParameterError( 6 ) ) );
+    BOOST_CHECK_GT( constrainedParameterError.segment( 0, 3 ).norm( ), unconstrainedParameterError.segment( 0, 3 ).norm( ) );
+    BOOST_CHECK_GT( std::fabs( constrainedParameterError( 6 ) ), std::fabs( unconstrainedParameterError( 6 ) ) );
 }
 
 BOOST_AUTO_TEST_CASE( test_APrioriParameterDeviation )

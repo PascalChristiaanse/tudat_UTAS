@@ -50,13 +50,9 @@ int main( )
     bodyNames[ 5 ] = "Sun";
 
     // Create bodies needed in simulation
-<<<<<<< HEAD
     std::map< std::string, std::shared_ptr< BodySettings > > bodySettings = getDefaultBodySettings( bodyNames );
     SystemOfBodies bodies = createBodies( bodySettings );
     setGlobalFrameBodyEphemerides( bodies, "SSB", "ECLIPJ2000" );
-=======
-    NamedBodyMap bodyMap = createBodies( getDefaultBodySettings( bodyNames ) );
->>>>>>> dominic-origin/features/efficiency_improvements
 
     // Run simulation for 2 different central body settings (barycentric and hierarchical)
     for( int centralBodySettings = 0; centralBodySettings < 2; centralBodySettings++ )
@@ -133,21 +129,26 @@ int main( )
         // Get initial state vector as input to integration.
         Eigen::VectorXd systemInitialState = getInitialStatesOfBodies( bodiesToPropagate, centralBodies, bodies, initialEphemerisTime );
 
+        // Define numerical integrator settings.
+        std::shared_ptr< IntegratorSettings<> > integratorSettings = std::make_shared< IntegratorSettings<> >( rungeKutta4, 3600.0 );
+
         // Define propagator settings.
         std::shared_ptr< TranslationalStatePropagatorSettings< double > > propagatorSettings =
                 std::make_shared< TranslationalStatePropagatorSettings< double > >(
-                        centralBodies, accelerationModelMap, bodiesToPropagate, systemInitialState, finalEphemerisTime );
-
-        // Define numerical integrator settings.
-        std::shared_ptr< IntegratorSettings<> > integratorSettings =
-                std::make_shared< IntegratorSettings<> >( rungeKutta4, initialEphemerisTime, 3600.0 );
+                        centralBodies,
+                        accelerationModelMap,
+                        bodiesToPropagate,
+                        systemInitialState,
+                        initialEphemerisTime,
+                        integratorSettings,
+                        std::make_shared< PropagationTimeTerminationSettings >( finalEphemerisTime ) );
 
         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         ///////////////////////             PROPAGATE ORBITS            ///////////////////////////////////////////////////
         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         // Create simulation object and propagate dynamics.
-        SingleArcDynamicsSimulator<> dynamicsSimulator( bodies, integratorSettings, propagatorSettings );
+        SingleArcDynamicsSimulator<> dynamicsSimulator( bodies, propagatorSettings, true );
 
         std::map< double, Eigen::VectorXd > integrationResult = dynamicsSimulator.getEquationsOfMotionNumericalSolution( );
 

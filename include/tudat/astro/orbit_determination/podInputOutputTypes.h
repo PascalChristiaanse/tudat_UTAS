@@ -18,6 +18,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/LU>
+#include <Eigen/SparseCore>
 
 #include <cereal/access.hpp>
 #include <cereal/types/base_class.hpp>
@@ -134,6 +135,25 @@ public:
         return observationCollection_->getConcatenatedWeights( );
     }
 
+    //! Function to return the full sparse observation weight matrix.
+    Eigen::SparseMatrix< double > getWeightsMatrix( )
+    {
+        return observationCollection_->getConcatenatedWeightMatrix( );
+    }
+
+    //! Function to check whether current observation weights contain off-diagonal terms.
+    bool hasOffDiagonalWeights( )
+    {
+        return observationCollection_->hasOffDiagonalWeights( );
+    }
+
+    void setWeightsMatrixDiagonals( const Eigen::VectorXd& weightsMatrixDiagonals )
+    {
+        std::cerr << "Warning, function setWeightsMatrixDiagonals is deprecated, "
+                     "weights should preferably be defined at the observation collection level.";
+        observationCollection_->setTabulatedWeights( weightsMatrixDiagonals );
+        //        weightsMatrixDiagonals_ = weightsMatrixDiagonals;
+    }
     //! Function to return the boolean denoting whether the dynamics and variational equations are reintegrated on first iteration
     /*!
      * Function to return the boolean denoting whether the dynamics and variational equations are to be reintegrated on first

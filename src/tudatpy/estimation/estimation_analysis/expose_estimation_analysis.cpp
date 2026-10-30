@@ -993,9 +993,10 @@ void expose_estimation_analysis( py::module& m )
 
          :type: SingleArcVariationalSimulationResults | None
       )doc" )
-            .def_property_readonly( "covariance_propagation_state_partial_addition_indices",
-                                    &tss::EstimationOutput< STATE_SCALAR_TYPE, TIME_TYPE >::getCovariancePropagationStatePartialAdditionIndices,
-                                    R"doc(
+            .def_property_readonly(
+                    "covariance_propagation_state_partial_addition_indices",
+                    &tss::EstimationOutput< STATE_SCALAR_TYPE, TIME_TYPE >::getCovariancePropagationStatePartialAdditionIndices,
+                    R"doc(
 
          **read-only**
 
@@ -1003,9 +1004,10 @@ void expose_estimation_analysis( py::module& m )
 
          :type: list[tuple[int, int]]
       )doc" )
-            .def_property_readonly( "covariance_propagation_state_transition_matrix_size",
-                                    &tss::EstimationOutput< STATE_SCALAR_TYPE, TIME_TYPE >::getCovariancePropagationStateTransitionMatrixSize,
-                                    R"doc(
+            .def_property_readonly(
+                    "covariance_propagation_state_transition_matrix_size",
+                    &tss::EstimationOutput< STATE_SCALAR_TYPE, TIME_TYPE >::getCovariancePropagationStateTransitionMatrixSize,
+                    R"doc(
 
          **read-only**
 
@@ -1013,9 +1015,10 @@ void expose_estimation_analysis( py::module& m )
 
          :type: int
       )doc" )
-            .def_property_readonly( "covariance_propagation_number_of_estimated_parameters",
-                                    &tss::EstimationOutput< STATE_SCALAR_TYPE, TIME_TYPE >::getCovariancePropagationNumberOfEstimatedParameters,
-                                    R"doc(
+            .def_property_readonly(
+                    "covariance_propagation_number_of_estimated_parameters",
+                    &tss::EstimationOutput< STATE_SCALAR_TYPE, TIME_TYPE >::getCovariancePropagationNumberOfEstimatedParameters,
+                    R"doc(
 
          **read-only**
 
@@ -1023,9 +1026,10 @@ void expose_estimation_analysis( py::module& m )
 
          :type: int
       )doc" )
-            .def_property_readonly( "covariance_propagation_number_of_consider_parameters",
-                                    &tss::EstimationOutput< STATE_SCALAR_TYPE, TIME_TYPE >::getCovariancePropagationNumberOfConsiderParameters,
-                                    R"doc(
+            .def_property_readonly(
+                    "covariance_propagation_number_of_consider_parameters",
+                    &tss::EstimationOutput< STATE_SCALAR_TYPE, TIME_TYPE >::getCovariancePropagationNumberOfConsiderParameters,
+                    R"doc(
 
          **read-only**
 
@@ -1033,9 +1037,10 @@ void expose_estimation_analysis( py::module& m )
 
          :type: int
       )doc" )
-            .def_property_readonly( "covariance_propagation_consider_parameters_values",
-                                    &tss::EstimationOutput< STATE_SCALAR_TYPE, TIME_TYPE >::getCovariancePropagationConsiderParametersValues,
-                                    R"doc(
+            .def_property_readonly(
+                    "covariance_propagation_consider_parameters_values",
+                    &tss::EstimationOutput< STATE_SCALAR_TYPE, TIME_TYPE >::getCovariancePropagationConsiderParametersValues,
+                    R"doc(
 
          **read-only**
 

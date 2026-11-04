@@ -297,19 +297,40 @@ class GaiaAstrometry:
         """Boolean mask selecting the rows (in table order) that belong to one object."""
         return (self._table["_object_key"] == object_key).to_numpy()
 
-    def _get_observation_covariance(self, object_key: int) -> list:
+    def get_observation_covariance_components(
+        self, object_key: int, random_scale: float = 1.0, systematic_scale: float = 1.0
+    ) -> tuple[list, list]:
         """
-        Build observation covariance matrix for one object. Returns a list of blocks that represent the covariance
-        over single transits, in the same order as the observations.
+        Build the random and systematic observation covariance components separately for one object.
+
+        Returns two lists of blocks that each represent the covariance over a single transit, in the same
+        order as the observations.  Splitting the two components lets a caller re-weight them independently
+        (e.g. down-weight the intra-transit systematic correlation, or inflate the random noise).
 
         ``object_key`` is the MPC number for asteroids, or the Gaia ``source_id`` for natural planetary satellites.
+
+        Parameters
+        ----------
+        object_key : int
+            MPC number for asteroids, or Gaia ``source_id`` for natural planetary satellites.
+        random_scale : float, optional
+            Multiplicative factor applied to the random covariance component, by default 1.0.
+        systematic_scale : float, optional
+            Multiplicative factor applied to the systematic covariance component, by default 1.0.
+
+        Returns
+        -------
+        tuple[list, list]
+            ``(random_blocks, systematic_blocks)``, each a list of ``2n x 2n`` covariance matrices
+            (one per transit, in observation order).
         """
         table = self._table_for_single_object(object_key)
 
         components_to_matrix = lambda ra, dec, corr: np.array(
             [[ra**2, ra * dec * corr], [ra * dec * corr, dec**2]]
         )
-        observation_covariance_matrix = []
+        random_blocks = []
+        systematic_blocks = []
 
         # Transit ID must be increasing with epoch to build a matrix consistent with the observations:
         if not table["transit_id"].is_monotonic_increasing:
@@ -343,9 +364,20 @@ class GaiaAstrometry:
                 covariance_systematic_submatrix, (transit_length, transit_length)
             )
 
-            observation_covariance_matrix.append(covariance_random + covariance_systematic)
+            random_blocks.append(random_scale * covariance_random)
+            systematic_blocks.append(systematic_scale * covariance_systematic)
 
-        return observation_covariance_matrix
+        return random_blocks, systematic_blocks
+
+    def _get_observation_covariance(self, object_key: int) -> list:
+        """
+        Build observation covariance matrix for one object. Returns a list of blocks that represent the covariance
+        over single transits, in the same order as the observations.
+
+        ``object_key`` is the MPC number for asteroids, or the Gaia ``source_id`` for natural planetary satellites.
+        """
+        random_blocks, systematic_blocks = self.get_observation_covariance_components(object_key)
+        return [random + systematic for random, systematic in zip(random_blocks, systematic_blocks)]
 
     def to_observation_collection(
         self, bodies: SystemOfBodies, target_names: Mapping[int, str] | None = None
